@@ -17,11 +17,11 @@ export default function DbErrorNotice({ message }: { message: string }) {
         </p>
       ) : noTables ? (
         <p className="text-[14px] text-white">
-          The database is connected but empty. Sign in at{" "}
+          The database is connected but the tables do not exist yet. Sign in at{" "}
           <Link href="/admin/login" className="font-bold text-accent">
             /admin/login
           </Link>{" "}
-          and press <span className="font-bold">Initialise &amp; seed database</span>.
+          and press <span className="font-bold">Initialise database</span>.
         </p>
       ) : (
         <p className="text-[14px] text-white">The site could not read from the database.</p>

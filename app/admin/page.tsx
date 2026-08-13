@@ -11,7 +11,7 @@ export default function AdminDashboard() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [seeding, setSeeding] = useState(false);
+  const [initialising, setInitialising] = useState(false);
   const [notice, setNotice] = useState("");
 
   const load = useCallback(async () => {
@@ -20,7 +20,7 @@ export default function AdminDashboard() {
       const [mRes, dRes] = await Promise.all([fetch("/api/matches"), fetch("/api/departments")]);
       if (!mRes.ok || !dRes.ok) {
         throw new Error(
-          "Could not read from the database. If the tables do not exist yet, run the seed below."
+          "Could not read from the database. If the tables do not exist yet, create them below."
         );
       }
       setMatches(await mRes.json());
@@ -64,20 +64,21 @@ export default function AdminDashboard() {
     }
   }
 
-  async function seed() {
-    setSeeding(true);
+  async function initDb() {
+    setInitialising(true);
     setNotice("");
     setError("");
-    const res = await fetch("/api/admin/seed", { method: "POST" });
+    const res = await fetch("/api/admin/init-db", { method: "POST" });
     const body = await res.json().catch(() => ({}));
-    setSeeding(false);
+    setInitialising(false);
     if (res.ok) {
+      const t = body.tables ?? {};
       setNotice(
-        `Database ready — ${body.seeded?.departments ?? 0} departments, ${body.seeded?.players ?? 0} players, ${body.seeded?.matches ?? 0} matches.`
+        `Tables ready — currently holding ${t.departments ?? 0} departments, ${t.players ?? 0} players, ${t.matches ?? 0} matches.`
       );
       load();
     } else {
-      setError(body.error ?? "Seeding failed.");
+      setError(body.error ?? "Could not create the tables.");
     }
   }
 
@@ -175,15 +176,15 @@ export default function AdminDashboard() {
       <section className="space-y-2 border-t border-line pt-4">
         <h2 className="px-1 text-[13px] font-bold uppercase tracking-wide text-white">Database</h2>
         <p className="text-[13.5px] text-white">
-          Creates the tables if they are missing and loads the demo departments, players and fixtures.
-          Safe to re-run: existing rows are updated in place rather than duplicated.
+          Creates the tables if they are missing. Safe to re-run — it never touches rows that
+          already exist.
         </p>
         <button
-          onClick={seed}
-          disabled={seeding}
+          onClick={initDb}
+          disabled={initialising}
           className="rounded-[8px] bg-accent px-4 py-2 text-[14px] font-bold text-white disabled:opacity-50"
         >
-          {seeding ? "Seeding..." : "Initialise & seed database"}
+          {initialising ? "Creating tables..." : "Initialise database"}
         </button>
       </section>
     </div>
