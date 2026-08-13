@@ -14,9 +14,9 @@ npm run dev
 
 Open http://localhost:3000.
 
-`POSTGRES_URL`, `ADMIN_USERNAME`, `ADMIN_PASSWORD` and `ADMIN_SESSION_SECRET` all have to be set — see `.env.example`. Without a database connection every page renders a "Database not ready" notice explaining what is missing.
+`POSTGRES_URL` and `ADMIN_SESSION_SECRET` have to be set — see `.env.example`. Without a database connection every page renders a "Database not ready" notice explaining what is missing.
 
-On a brand-new database, sign in at `/admin/login` and press **Initialise database** to create the tables.
+On a brand-new database, open `/admin/setup` to create the first administrator. It creates the tables on the way, then closes permanently.
 
 ## How data flows
 
@@ -39,6 +39,8 @@ Public, read-only:
 Admin-only, gated by the session cookie in `middleware.ts`:
 
 - `POST /api/admin/login` / `POST /api/admin/logout`
+- `POST /api/admin/setup` — first-run only, creates the schema and first account
+- `GET|POST|DELETE /api/admin/users`, `POST /api/admin/password`
 - `POST|DELETE /api/admin/matches`, `POST|DELETE /api/admin/matches/[id]/events`
 - `POST|DELETE /api/admin/departments`, `POST|DELETE /api/admin/players`
 - `POST /api/admin/init-db` — creates tables if missing, safe to re-run
@@ -47,9 +49,33 @@ Adding a goal or card event also moves the matching player's counters, so the To
 
 ## Admin
 
-- `/admin/login` — username + password, signed session cookie (HMAC-SHA256 via Web Crypto, so it works in the Edge middleware runtime)
-- `/admin` — match list with inline status / minute / score editing, plus database setup
+- `/admin/setup` — creates the first administrator, only while no account exists
+- `/admin/login` — username + password
+- `/admin` — match editing, administrator management, database setup
 - `/admin/matches/[id]` — add and remove match events
+
+### Authentication
+
+Accounts live in the `admin_users` table. Passwords are hashed with scrypt
+(`lib/password.ts`) using a per-user random salt; the parameters are stored
+alongside each hash so they can be raised later without invalidating existing
+passwords. Nothing is stored in environment variables and no password is ever
+written in plaintext.
+
+Sign-in issues a signed session cookie (HMAC-SHA256 via Web Crypto, so it also
+works in the Edge middleware runtime) carrying the account id and an expiry,
+12 hours by default. Two layers guard admin routes:
+
+1. `middleware.ts` verifies the cookie signature and expiry on every request,
+   with no database round-trip.
+2. `lib/require-admin.ts` re-checks that the account still exists before any
+   write. Without this a deleted administrator would keep access until their
+   cookie expired, because the session is stateless.
+
+Known limits worth knowing before this faces the public internet: changing a
+password does not invalidate that user's other active sessions, and the login
+throttle in `app/api/admin/login/route.ts` is per serverless instance rather
+than global.
 
 ## What's built
 

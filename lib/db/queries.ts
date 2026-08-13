@@ -77,6 +77,14 @@ function rowToMatchBase(row: any): Omit<Match, "events"> {
     id: row.id,
     status: row.status,
     minute: row.minute ?? undefined,
+    firstHalfStartedAt: row.first_half_started_at
+      ? new Date(row.first_half_started_at).toISOString()
+      : null,
+    secondHalfStartedAt: row.second_half_started_at
+      ? new Date(row.second_half_started_at).toISOString()
+      : null,
+    firstHalfAddedMinutes: row.first_half_added_minutes ?? 0,
+    secondHalfAddedMinutes: row.second_half_added_minutes ?? 0,
     kickoff: row.kickoff,
     round: row.round,
     group: row.group,

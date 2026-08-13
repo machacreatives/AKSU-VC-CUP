@@ -64,7 +64,7 @@ export default function HomeTabs({
     <div>
       <TabBar tabs={tabs} active={tab} onChange={setTab} />
 
-      <div className="space-y-5 px-4 py-4">
+      <div className="space-y-5 px-4 py-4 lg:space-y-7 lg:px-6 lg:py-6">
         {tab === "matches" && (
           <>
             {matches.length === 0 && (
@@ -74,10 +74,10 @@ export default function HomeTabs({
             )}
             {live.length > 0 && (
               <section className="space-y-2">
-                <h2 className="flex items-center gap-1.5 px-1 text-[13px] font-bold uppercase tracking-wide text-win">
+                <h2 className="flex items-center gap-1.5 px-1 text-[13px] font-bold uppercase tracking-wide text-win lg:text-[14px]">
                   <span className="pulse-live h-1.5 w-1.5 rounded-full bg-win" /> Live now
                 </h2>
-                <div className="space-y-2">
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                   {live.map((m) => (
                     <MatchCard key={m.id} match={m} />
                   ))}
@@ -86,8 +86,8 @@ export default function HomeTabs({
             )}
             {upcoming.length > 0 && (
               <section className="space-y-2">
-                <h2 className="px-1 text-[13px] font-bold uppercase tracking-wide text-white">Upcoming</h2>
-                <div className="space-y-2">
+                <h2 className="px-1 text-[13px] font-bold uppercase tracking-wide text-white lg:text-[14px]">Upcoming</h2>
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                   {upcoming.map((m) => (
                     <MatchCard key={m.id} match={m} />
                   ))}
@@ -96,8 +96,8 @@ export default function HomeTabs({
             )}
             {finished.length > 0 && (
               <section className="space-y-2">
-                <h2 className="px-1 text-[13px] font-bold uppercase tracking-wide text-white">Full time</h2>
-                <div className="space-y-2">
+                <h2 className="px-1 text-[13px] font-bold uppercase tracking-wide text-white lg:text-[14px]">Full time</h2>
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                   {finished.map((m) => (
                     <MatchCard key={m.id} match={m} />
                   ))}
@@ -109,7 +109,7 @@ export default function HomeTabs({
 
         {tab === "table" && (
           <section className="space-y-3">
-            <div className="flex gap-2">
+            <div className="flex gap-2 lg:max-w-md">
               {(["main", "obioakpa"] as Campus[]).map((c) => (
                 <button
                   key={c}
@@ -124,9 +124,11 @@ export default function HomeTabs({
                 </button>
               ))}
             </div>
-            {campusGroups[campus].map((g) => (
-              <StandingsTable key={g} rows={rowsForGroup(g)} title={`Group ${g}`} />
-            ))}
+            <div className="grid gap-3 lg:grid-cols-2">
+              {campusGroups[campus].map((g) => (
+                <StandingsTable key={g} rows={rowsForGroup(g)} title={`Group ${g}`} />
+              ))}
+            </div>
           </section>
         )}
 

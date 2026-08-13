@@ -25,16 +25,23 @@ export default function KnockoutBracket() {
         </p>
       </div>
 
-      {rounds.map((round) => (
-        <section key={round.label} className="space-y-2">
-          <h2 className="px-1 text-[13px] font-extrabold uppercase tracking-wide text-accent">{round.label}</h2>
-          <div className="space-y-2">
-            {Array.from({ length: round.matches }).map((_, i) => (
-              <TBDCard key={i} />
-            ))}
-          </div>
-        </section>
-      ))}
+      {/* Stacked rounds on phones. On large screens the rounds become columns
+          that read left to right, and each round is centred against the one
+          before it so it reads as an actual bracket. */}
+      <div className="space-y-5 lg:grid lg:grid-cols-3 lg:items-center lg:gap-6 lg:space-y-0">
+        {rounds.map((round) => (
+          <section key={round.label} className="space-y-2">
+            <h2 className="px-1 text-[13px] font-extrabold uppercase tracking-wide text-accent lg:text-center lg:text-[14px]">
+              {round.label}
+            </h2>
+            <div className="space-y-2 lg:space-y-4">
+              {Array.from({ length: round.matches }).map((_, i) => (
+                <TBDCard key={i} />
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
     </div>
   );
 }

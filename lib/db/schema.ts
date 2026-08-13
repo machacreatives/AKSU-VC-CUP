@@ -54,6 +54,15 @@ CREATE TABLE IF NOT EXISTS matches (
   away_stats JSONB
 );
 
+-- Match clock. The minute is never stored as a ticking number. We record when
+-- each half kicked off and every client derives the minute from that, so all
+-- viewers agree without the admin typing anything.
+-- ADD COLUMN IF NOT EXISTS so existing databases pick these up on init.
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS first_half_started_at TIMESTAMPTZ;
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS second_half_started_at TIMESTAMPTZ;
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS first_half_added_minutes INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS second_half_added_minutes INTEGER NOT NULL DEFAULT 0;
+
 CREATE TABLE IF NOT EXISTS match_events (
   id SERIAL PRIMARY KEY,
   match_id TEXT NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
@@ -64,11 +73,27 @@ CREATE TABLE IF NOT EXISTS match_events (
   detail TEXT
 );
 
+CREATE TABLE IF NOT EXISTS admin_users (
+  id TEXT PRIMARY KEY,
+  username TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  display_name TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_login_at TIMESTAMPTZ
+);
+
 CREATE INDEX IF NOT EXISTS idx_players_department ON players(department_id);
 CREATE INDEX IF NOT EXISTS idx_match_events_match ON match_events(match_id);
 `;
 
 // Split for drivers that accept only one statement per call.
-export const SCHEMA_STATEMENTS = SCHEMA_SQL.split(";")
+//
+// Line comments are stripped first: a `;` inside a `--` comment would
+// otherwise be treated as a statement boundary and split the comment into
+// fragments that Postgres tries to execute.
+export const SCHEMA_STATEMENTS = SCHEMA_SQL.split("\n")
+  .filter((line) => !line.trim().startsWith("--"))
+  .join("\n")
+  .split(";")
   .map((s) => s.trim())
   .filter(Boolean);

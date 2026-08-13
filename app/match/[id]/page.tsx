@@ -4,6 +4,7 @@ import { DataProvider } from "@/lib/data-context";
 import AutoRefresh from "@/components/AutoRefresh";
 import DbErrorNotice from "@/components/DbErrorNotice";
 import DeptBadge from "@/components/DeptBadge";
+import MatchClock from "@/components/MatchClock";
 import MatchDetailTabs from "@/components/MatchDetailTabs";
 import ScorersLine from "@/components/ScorersLine";
 import { Department } from "@/lib/types";
@@ -45,32 +46,29 @@ export default async function MatchPage({ params }: { params: { id: string } }) 
   const scoreClass = (won: boolean, lost: boolean) => (won ? "text-win" : lost ? "text-loss" : "text-white");
 
   return (
-    <DataProvider departments={departments} players={players}>
+    <DataProvider departments={departments} players={players} serverNow={Date.now()}>
       <AutoRefresh />
       <div>
-        <div className="border-b border-line px-4 py-6">
-          <div className="mb-3 flex items-center justify-center gap-2 text-[13px] font-semibold text-white">
+        <div className="border-b border-line px-4 py-6 lg:py-8">
+          <div className="mx-auto mb-3 flex max-w-3xl items-center justify-center gap-2 text-[13px] font-semibold text-white lg:text-[14px]">
             <span className="rounded-full bg-surface2 px-2 py-0.5 text-white">GROUP {match.group}</span>
             <span>{match.round}</span>
             <span>&middot;</span>
             <span>{match.venue}</span>
           </div>
 
-          <div className="flex items-start justify-between">
+          <div className="mx-auto flex max-w-3xl items-start justify-between">
             <div className="flex flex-1 flex-col items-center gap-2">
               <DeptBadge department={home} size={44} />
-              <span className="text-center text-[15px] font-bold text-white">{home.name}</span>
+              <span className="text-center text-[15px] font-bold text-white lg:text-[18px]">{home.name}</span>
               <ScorersLine match={match} departmentId={home.id} align="left" />
             </div>
 
             <div className="flex flex-col items-center gap-1 px-3 pt-1">
               {isLive && (
-                <span className="flex items-center gap-1 text-[13px] font-bold text-win">
-                  <span className="pulse-live h-1.5 w-1.5 rounded-full bg-win" />
-                  {match.status === "HT" ? "HT" : `${match.minute}'`}
-                </span>
+                <MatchClock match={match} className="text-[13px] font-bold text-win" />
               )}
-              <div className="tabular font-score text-[36px] font-extrabold">
+              <div className="tabular font-score text-[36px] font-extrabold lg:text-[52px]">
                 {match.status === "UPCOMING" ? (
                   <span className="text-white">vs</span>
                 ) : (
@@ -86,7 +84,7 @@ export default async function MatchPage({ params }: { params: { id: string } }) 
 
             <div className="flex flex-1 flex-col items-center gap-2">
               <DeptBadge department={away} size={44} />
-              <span className="text-center text-[15px] font-bold text-white">{away.name}</span>
+              <span className="text-center text-[15px] font-bold text-white lg:text-[18px]">{away.name}</span>
               <ScorersLine match={match} departmentId={away.id} align="right" />
             </div>
           </div>

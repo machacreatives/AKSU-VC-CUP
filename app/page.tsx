@@ -21,7 +21,7 @@ export default async function Home() {
   }
 
   return (
-    <DataProvider departments={data.departments} players={data.players}>
+    <DataProvider departments={data.departments} players={data.players} serverNow={Date.now()}>
       <AutoRefresh />
       <HomeTabs
         matches={data.matches}

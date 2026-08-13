@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
@@ -9,6 +9,18 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // On a brand-new database there is no account to sign in with yet, so send
+  // the first visitor to setup rather than leaving them stuck at a form that
+  // can never succeed.
+  useEffect(() => {
+    fetch("/api/admin/setup")
+      .then((r) => r.json())
+      .then((b) => {
+        if (b.needsSetup) router.replace("/admin/setup");
+      })
+      .catch(() => {});
+  }, [router]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -19,18 +31,19 @@ export default function LoginPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password }),
     });
+    const body = await res.json().catch(() => ({}));
     setLoading(false);
     if (res.ok) {
       router.push("/admin");
       router.refresh();
     } else {
-      setError("Invalid username or password.");
+      setError(body.error ?? "Invalid username or password.");
     }
   }
 
   return (
-    <div className="flex min-h-[70vh] items-center justify-center px-4">
-      <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4 rounded-card border border-line bg-surface p-6 shadow-premium">
+    <div className="flex min-h-[70vh] items-center justify-center px-4 py-10">
+      <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4 rounded-card border border-line bg-surface p-6 shadow-premium lg:max-w-md lg:p-8">
         <h1 className="text-center text-[18px] font-extrabold text-white">Admin Login</h1>
         <div className="space-y-1">
           <label className="text-[12.5px] font-semibold text-white">Username</label>

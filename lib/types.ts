@@ -59,7 +59,18 @@ export type MatchSide = {
 export type Match = {
   id: string;
   status: MatchStatus;
-  minute?: number; // for LIVE / HT
+  /**
+   * Legacy manual minute. The live clock is derived from the kickoff
+   * timestamps below (see lib/match-clock.ts); this is only a fallback for
+   * rows recorded before the clock existed.
+   */
+  minute?: number;
+  /** Set when the referee starts each half — the clock counts from these. */
+  firstHalfStartedAt?: string | null;
+  secondHalfStartedAt?: string | null;
+  /** Announced stoppage time, set by the admin. */
+  firstHalfAddedMinutes: number;
+  secondHalfAddedMinutes: number;
   kickoff: string; // display string
   round: string; // e.g. "Matchday 3"
   group: GroupId;

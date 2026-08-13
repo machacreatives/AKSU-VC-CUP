@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Match, Department } from "@/lib/types";
+import AccountSection from "./AccountSection";
+import MatchClockControls from "./MatchClockControls";
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -91,9 +93,9 @@ export default function AdminDashboard() {
   if (loading) return <div className="px-4 py-6 text-white">Loading...</div>;
 
   return (
-    <div className="space-y-5 px-4 py-5">
+    <div className="mx-auto max-w-5xl space-y-5 px-4 py-5 lg:px-6 lg:py-7">
       <div className="flex items-center justify-between">
-        <h1 className="text-[18px] font-extrabold text-white">Admin Dashboard</h1>
+        <h1 className="text-[18px] font-extrabold text-white lg:text-[22px]">Admin Dashboard</h1>
         <div className="flex items-center gap-2">
           <Link href="/" className="rounded-full border border-line px-3 py-1.5 text-[13px] font-bold text-white">
             View site
@@ -125,7 +127,7 @@ export default function AdminDashboard() {
           <p className="text-[14px] text-white">No matches in the database yet.</p>
         )}
 
-        <div className="space-y-2">
+        <div className="grid gap-2 xl:grid-cols-2">
           {matches.map((m) => (
             <div key={m.id} className="rounded-card border border-line bg-surface p-3 shadow-premium">
               <div className="mb-2 flex items-center justify-between">
@@ -136,24 +138,15 @@ export default function AdminDashboard() {
                   Edit lineups &amp; events &rarr;
                 </Link>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <select
-                  value={m.status}
-                  onChange={(e) => updateMatch(m, { status: e.target.value as Match["status"] })}
-                  className="rounded-[6px] border border-line bg-surface2 px-2 py-1 text-[13px] text-white"
-                >
-                  <option value="UPCOMING">UPCOMING</option>
-                  <option value="LIVE">LIVE</option>
-                  <option value="HT">HT</option>
-                  <option value="FT">FT</option>
-                </select>
-                <input
-                  type="number"
-                  value={m.minute ?? ""}
-                  onChange={(e) => updateMatch(m, { minute: Number(e.target.value) })}
-                  placeholder="min"
-                  className="w-16 rounded-[6px] border border-line bg-surface2 px-2 py-1 text-[13px] text-white"
-                />
+              <MatchClockControls
+                match={m}
+                onChange={(updated) =>
+                  setMatches((prev) => prev.map((x) => (x.id === updated.id ? updated : x)))
+                }
+              />
+
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className="text-[12.5px] font-semibold text-white">Score</span>
                 <input
                   type="number"
                   value={m.home.score}
@@ -172,6 +165,8 @@ export default function AdminDashboard() {
           ))}
         </div>
       </section>
+
+      <AccountSection />
 
       <section className="space-y-2 border-t border-line pt-4">
         <h2 className="px-1 text-[13px] font-bold uppercase tracking-wide text-white">Database</h2>
