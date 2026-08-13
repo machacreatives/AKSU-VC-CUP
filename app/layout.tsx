@@ -21,7 +21,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={barlow.variable}>
       <body className="min-h-screen bg-base font-sans antialiased">
-        <div className="mx-auto min-h-screen max-w-lg border-x border-line/60">
+        {/* Widens in steps rather than jumping straight from phone to desktop,
+            so tablets don't sit inside a 512px column with empty space either
+            side. Header uses the identical ladder so the two stay aligned. */}
+        <div className="mx-auto min-h-screen w-full max-w-lg border-x border-line/60 md:max-w-2xl lg:max-w-5xl xl:max-w-6xl">
           <Header />
           <main>{children}</main>
         </div>

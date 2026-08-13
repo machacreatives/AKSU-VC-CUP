@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useMemo } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { Department, Player } from "@/lib/types";
 
 // Every card, table and pitch needs to turn a departmentId / playerId into a
@@ -12,6 +12,8 @@ type Data = {
   players: Player[];
   departmentsById: Map<string, Department>;
   playersById: Map<string, Player>;
+  /** Server time when the page was rendered, in ms. Anchors the match clock. */
+  serverNow: number;
 };
 
 const DataContext = createContext<Data | null>(null);
@@ -19,20 +21,23 @@ const DataContext = createContext<Data | null>(null);
 export function DataProvider({
   departments,
   players,
+  serverNow,
   children,
 }: {
   departments: Department[];
   players: Player[];
+  serverNow: number;
   children: React.ReactNode;
 }) {
   const value = useMemo<Data>(
     () => ({
       departments,
       players,
+      serverNow,
       departmentsById: new Map(departments.map((d) => [d.id, d])),
       playersById: new Map(players.map((p) => [p.id, p])),
     }),
-    [departments, players]
+    [departments, players, serverNow]
   );
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
@@ -95,4 +100,28 @@ export function usePlayer(id: string): Player {
 export function usePlayerLookup(): (id: string) => Player {
   const { playersById } = useData();
   return (id) => playersById.get(id) ?? unknownPlayer(id);
+}
+
+/**
+ * A clock that ticks every second, anchored to the server.
+ *
+ * The first value is exactly the server's timestamp, so the initial client
+ * render matches what was server-rendered and React has nothing to complain
+ * about. After mount it switches to real time, corrected by the offset between
+ * this device's clock and the server's — a viewer whose laptop is five minutes
+ * fast should still see the right match minute.
+ */
+export function useNow(tickMs = 1000): number {
+  const { serverNow } = useData();
+  const [now, setNow] = useState(serverNow);
+
+  useEffect(() => {
+    const skew = Date.now() - serverNow;
+    const tick = () => setNow(Date.now() - skew);
+    tick();
+    const id = setInterval(tick, tickMs);
+    return () => clearInterval(id);
+  }, [serverNow, tickMs]);
+
+  return now;
 }

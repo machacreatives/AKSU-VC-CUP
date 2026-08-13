@@ -7,7 +7,7 @@ export default function DbErrorNotice({ message }: { message: string }) {
   const noTables = /relation .* does not exist/i.test(message);
 
   return (
-    <div className="space-y-3 px-4 py-8">
+    <div className="mx-auto max-w-2xl space-y-3 px-4 py-8">
       <h1 className="text-[17px] font-extrabold text-white">Database not ready</h1>
       {notConfigured ? (
         <p className="text-[14px] text-white">

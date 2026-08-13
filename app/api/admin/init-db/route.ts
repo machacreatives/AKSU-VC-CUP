@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "@vercel/postgres";
 import { SCHEMA_STATEMENTS } from "@/lib/db/schema";
+import { requireAdmin } from "@/lib/require-admin";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,9 @@ export const dynamic = "force-dynamic";
 // CREATE TABLE / CREATE INDEX IF NOT EXISTS, so re-running is harmless and
 // never touches existing rows.
 export async function POST() {
+  const auth = await requireAdmin();
+  if (auth.response) return auth.response;
+
   try {
     for (const stmt of SCHEMA_STATEMENTS) {
       await sql.query(stmt);

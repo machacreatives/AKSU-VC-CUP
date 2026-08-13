@@ -64,7 +64,7 @@ export default function AdminMatchPage() {
 
   if (error)
     return (
-      <div className="space-y-3 px-4 py-6">
+      <div className="mx-auto max-w-4xl space-y-3 px-4 py-6">
         <Link href="/admin" className="text-[13px] font-bold text-accent">&larr; Back to dashboard</Link>
         <p className="rounded-card border border-loss/40 bg-loss/10 px-3 py-2 text-[13.5px] text-white">{error}</p>
       </div>
@@ -77,9 +77,9 @@ export default function AdminMatchPage() {
   }
 
   return (
-    <div className="space-y-5 px-4 py-5">
+    <div className="mx-auto max-w-4xl space-y-5 px-4 py-5 lg:px-6 lg:py-7">
       <Link href="/admin" className="text-[13px] font-bold text-accent">&larr; Back to dashboard</Link>
-      <h1 className="text-[18px] font-extrabold text-white">
+      <h1 className="text-[18px] font-extrabold text-white lg:text-[22px]">
         {deptName(match.home.departmentId)} {match.home.score} - {match.away.score} {deptName(match.away.departmentId)}
       </h1>
 

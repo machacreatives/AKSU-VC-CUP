@@ -31,6 +31,8 @@ function MetricValue({ player, metric }: { player: Player; metric: Metric }) {
   );
 }
 
+const LIMIT = 12;
+
 export default function StatList({ players, metric }: { players: Player[]; metric: Metric }) {
   const getDepartment = useDepartmentLookup();
 
@@ -42,16 +44,22 @@ export default function StatList({ players, metric }: { players: Player[]; metri
     );
   }
 
+  const shown = players.slice(0, LIMIT);
+
   return (
-    <div className="overflow-hidden rounded-card border border-line bg-surface shadow-premium">
-      {players.slice(0, 8).map((p, i) => {
+    // One column on phones. On large screens the rows flow into two columns
+    // inside the same card, so a 12-name leaderboard fills the width instead
+    // of running down a narrow strip.
+    <div className="overflow-hidden rounded-card border border-line bg-surface shadow-premium lg:grid lg:grid-cols-2">
+      {shown.map((p, i) => {
         const d = getDepartment(p.departmentId);
+        const isLast = i === shown.length - 1;
         return (
           <div
             key={p.id}
-            className={`flex items-center gap-3 px-3 py-2.5 ${
-              i !== players.length - 1 ? "border-b border-line" : ""
-            }`}
+            className={`flex items-center gap-3 px-3 py-2.5 lg:px-4 lg:py-3 ${
+              isLast ? "" : "border-b border-line"
+            } ${i % 2 === 0 ? "lg:border-r lg:border-r-line" : ""}`}
           >
             <span className="tabular w-4 text-[13.5px] font-bold text-white">{i + 1}</span>
             <DeptBadge department={d} size={22} />

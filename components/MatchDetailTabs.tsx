@@ -26,8 +26,11 @@ export default function MatchDetailTabs({ match }: { match: Match }) {
   return (
     <div>
       <TabBar tabs={tabs} active={tab} onChange={setTab} />
-      <div className="px-4 py-4">
+      <div className="px-4 py-4 lg:px-6 lg:py-6">
+        {/* The pitch is portrait (68:100), so on a wide screen it must be
+            capped and centred or it becomes absurdly tall. */}
         {tab === "lineups" && hasLineups && (
+          <div className="mx-auto w-full sm:max-w-md">
           <FormationPitch
             home={home}
             away={away}
@@ -38,11 +41,18 @@ export default function MatchDetailTabs({ match }: { match: Match }) {
             homeCaptainId={match.home.captainId}
             awayCaptainId={match.away.captainId}
           />
+          </div>
         )}
         {tab === "stats" && hasStats && (
-          <MatchStatsCard home={home} away={away} homeStats={match.home.stats!} awayStats={match.away.stats!} />
+          <div className="mx-auto w-full lg:max-w-2xl">
+            <MatchStatsCard home={home} away={away} homeStats={match.home.stats!} awayStats={match.away.stats!} />
+          </div>
         )}
-        {tab === "events" && <EventTimeline match={match} />}
+        {tab === "events" && (
+          <div className="mx-auto w-full lg:max-w-2xl">
+            <EventTimeline match={match} />
+          </div>
+        )}
       </div>
     </div>
   );

@@ -14,7 +14,7 @@ export default function StandingsTable({ rows, title }: { rows: StandingsRow[]; 
           <span className="text-[13px] font-extrabold uppercase tracking-wide text-accent">{title}</span>
         </div>
       )}
-      <div className="grid grid-cols-[1.4rem_1fr_1.6rem_1.6rem_1.6rem_1.6rem_2.2rem_2.4rem] items-center gap-1 border-b border-line px-3 py-2 text-[11.5px] font-bold uppercase tracking-wide text-white">
+      <div className="grid grid-cols-[1.4rem_1fr_1.6rem_1.6rem_1.6rem_1.6rem_2.2rem_2.4rem] lg:grid-cols-[2rem_1fr_2.6rem_2.6rem_2.6rem_2.6rem_3.2rem_3.4rem] items-center gap-1 border-b border-line px-3 py-2 text-[11.5px] font-bold uppercase tracking-wide text-white lg:px-4">
         <span>#</span>
         <span>Department</span>
         <span className="text-center">P</span>
@@ -30,9 +30,9 @@ export default function StandingsTable({ rows, title }: { rows: StandingsRow[]; 
         return (
           <div
             key={row.departmentId}
-            className={`grid grid-cols-[1.4rem_1fr_1.6rem_1.6rem_1.6rem_1.6rem_2.2rem_2.4rem] items-center gap-1 px-3 py-2.5 text-[14.5px] ${
+            className={`grid grid-cols-[1.4rem_1fr_1.6rem_1.6rem_1.6rem_1.6rem_2.2rem_2.4rem] lg:grid-cols-[2rem_1fr_2.6rem_2.6rem_2.6rem_2.6rem_3.2rem_3.4rem] items-center gap-1 px-3 py-2.5 text-[14.5px] ${
               i !== rows.length - 1 ? "border-b border-line" : ""
-            } ${i % 2 === 1 ? "bg-white/[0.02]" : ""}`}
+            } ${i % 2 === 1 ? "bg-white/[0.02]" : ""} lg:px-4 lg:py-3`}
           >
             <span className="tabular font-bold text-white">{i + 1}</span>
             <span className="flex min-w-0 items-center gap-2">

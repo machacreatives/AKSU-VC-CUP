@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Match } from "@/lib/types";
 import { useDepartment } from "@/lib/data-context";
 import DeptBadge from "./DeptBadge";
+import MatchClock from "./MatchClock";
 
 export default function MatchCard({ match }: { match: Match }) {
   const home = useDepartment(match.home.departmentId);
@@ -20,7 +21,7 @@ export default function MatchCard({ match }: { match: Match }) {
   return (
     <Link
       href={`/match/${match.id}`}
-      className="group relative flex items-center gap-3 overflow-hidden rounded-card border border-line bg-surface py-3 pl-4 pr-3 shadow-premium transition-colors hover:bg-surface2"
+      className="group relative flex items-center gap-3 overflow-hidden rounded-card border border-line bg-surface py-3 pl-4 pr-3 shadow-premium transition-colors hover:bg-surface2 lg:py-3.5 lg:pl-5 lg:pr-4"
     >
       <span
         className="absolute inset-y-0 left-0 w-[3px]"
@@ -29,10 +30,7 @@ export default function MatchCard({ match }: { match: Match }) {
       {/* status column */}
       <div className="flex w-14 shrink-0 flex-col items-center justify-center gap-0.5">
         {isLive ? (
-          <span className="flex items-center gap-1 text-[13px] font-bold text-win">
-            <span className="pulse-live h-1.5 w-1.5 rounded-full bg-win" />
-            {match.status === "HT" ? "HT" : `${match.minute}'`}
-          </span>
+          <MatchClock match={match} className="text-[13px] font-bold text-win" />
         ) : match.status === "UPCOMING" ? (
           <span className="text-[14.5px] font-medium text-white">
             {match.kickoff.split(",")[1] ?? match.kickoff}
