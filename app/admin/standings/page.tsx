@@ -36,11 +36,6 @@ function AdminStandingsPage() {
   const loading = matchesQuery.isPending || teamsQuery.isPending || groupsQuery.isPending;
   const error = matchesQuery.error?.message || teamsQuery.error?.message || "";
 
-  const standings = useMemo(
-    () => computeStandings(matches, departments),
-    [matches, departments]
-  );
-
   const played = matches.filter((m) => m.status === "FT").length;
   const live = matches.filter((m) => m.status === "LIVE" || m.status === "HT").length;
 
@@ -98,14 +93,15 @@ function AdminStandingsPage() {
                 </h2>
                 <div className="grid gap-3 lg:grid-cols-2">
                   {groupsForCampus(groups, campus).map((group) => {
-                    // Filter on campus as well as group: a team sitting in a
-                    // group that belongs to the other campus would otherwise
-                    // appear under both headings.
+                    // Built from the matches played in this group, so moving
+                    // a team between groups does not move its record with it.
+                    const teams = departments.filter(
+                      (d) => d.group === group.id && d.campus === campus
+                    );
                     const rows = sortStandings(
-                      standings.filter((row) => {
-                        const team = departments.find((d) => d.id === row.departmentId);
-                        return team?.group === group.id && team?.campus === campus;
-                      })
+                      computeStandings(matches, teams, group.id),
+                      matches,
+                      group.id
                     );
 
                     return (

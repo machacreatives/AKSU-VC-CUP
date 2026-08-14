@@ -83,6 +83,31 @@ function appearances(match: Match, side: "home" | "away"): Set<string> {
   return ids;
 }
 
+/**
+ * The scoreline the recorded goals add up to.
+ *
+ * A score can be typed directly or moved by recording goals, and nothing ever
+ * reconciled the two — type a 3-1 and Top Scorers stays empty while the match
+ * page shows a scoreline no goalscorer explains. This is what the events say,
+ * so the difference can at least be pointed at.
+ */
+export function scoreFromEvents(match: Match): { home: number; away: number } {
+  let home = 0;
+  let away = 0;
+  for (const event of match.events) {
+    if (event.type !== "GOAL") continue;
+    if (event.departmentId === match.home.departmentId) home++;
+    else if (event.departmentId === match.away.departmentId) away++;
+  }
+  return { home, away };
+}
+
+/** True when the stored scoreline and the recorded goals disagree. */
+export function scoreDisagreesWithEvents(match: Match): boolean {
+  const derived = scoreFromEvents(match);
+  return derived.home !== match.home.score || derived.away !== match.away.score;
+}
+
 /** A match only rates players once the referee has started it. */
 export function hasKickedOff(match: Match): boolean {
   return match.status === "LIVE" || match.status === "HT" || match.status === "FT";
@@ -171,6 +196,12 @@ export function computeMatchRatings(match: Match, players: Player[]): Map<string
 
     for (const playerId of played) {
       const player = byId.get(playerId);
+      // A teamsheet can name an id that no longer resolves — the XI and bench
+      // are TEXT[] columns, so nothing stops a deleted player's id staying
+      // behind. Rating a name nobody can look up puts a 6.0 on the board for a
+      // player who does not exist; the pitch already draws them as "Unknown".
+      if (!player) continue;
+
       const lines: RatingLine[] = [{ label: "Base", delta: RATING_RULES.BASE }];
 
       const scored = goals.get(playerId) ?? 0;
@@ -190,16 +221,16 @@ export function computeMatchRatings(match: Match, players: Player[]): Map<string
 
       // The back line is rated on the team's clean sheet, not on anything the
       // events can attribute to one defender.
-      if (cleanSheet && (player?.position === "GK" || player?.position === "DF")) {
+      if (cleanSheet && (player.position === "GK" || player.position === "DF")) {
         lines.push({ label: "Clean sheet", delta: RATING_RULES.CLEAN_SHEET });
       }
-      if (hasPossession && player?.position === "MF") {
+      if (hasPossession && player.position === "MF") {
         lines.push({
           label: `Possession ${stats?.possession}%`,
           delta: RATING_RULES.POSSESSION,
         });
       }
-      if (attacked && player?.position === "FW") {
+      if (attacked && player.position === "FW") {
         lines.push({
           label: `${stats?.shots} shots, ${stats?.corners} corners`,
           delta: RATING_RULES.ATTACKING_OUTPUT,

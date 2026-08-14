@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { usePlayers } from "@/lib/api";
-import { computeClock } from "@/lib/match-clock";
+import { computeClock, suggestedEventMinute } from "@/lib/match-clock";
 import {
   Department,
   GOAL_TYPES,
@@ -66,7 +66,9 @@ export default function EventForm({
   }, []);
 
   const clock = computeClock(match, now);
-  const liveMinute = clock.minute;
+  // Not clock.minute: that is null at half time and full time, which rendered
+  // an empty field that submitted as minute 0.
+  const liveMinute = suggestedEventMinute(match, now);
   const minuteValue = manualMinute ?? (liveMinute != null ? String(liveMinute) : "");
 
   const squad = squadOptions(allPlayers, deptId);
@@ -115,6 +117,10 @@ export default function EventForm({
 
     if (!playerId) return setError(type === "SUB" ? "Pick the player going off." : "Pick the player.");
     if (type === "SUB" && !subInId) return setError("Pick the player coming on.");
+    // An empty field is not minute zero. Number("") is 0, and 0 passed every
+    // check below, so a blank minute silently became the first second of the
+    // match.
+    if (minuteValue.trim() === "") return setError("Enter the minute.");
     const minute = Number(minuteValue);
     if (!Number.isInteger(minute) || minute < 0) return setError("Enter the minute.");
 

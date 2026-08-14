@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { requireSuperadmin } from "@/lib/require-admin";
+import { recordAudit } from "@/lib/db/audit";
 import { deleteMatch, getDepartments, getGroups, getMatch, upsertMatch } from "@/lib/db/queries";
 import { formatKickoff, kickoffInputToIso } from "@/lib/kickoff";
 import { GroupId, MATCH_STAGES, Match, MatchStage, MatchStatus } from "@/lib/types";
@@ -124,6 +125,11 @@ export async function POST(req: Request) {
       group,
       stage,
       manOfTheMatchId: existing?.manOfTheMatchId ?? null,
+      // Owned by the tie-resolution endpoint; carried through so editing a
+      // fixture cannot wipe how it was decided.
+      wentToExtraTime: existing?.wentToExtraTime ?? false,
+      homePenalties: existing?.homePenalties ?? null,
+      awayPenalties: existing?.awayPenalties ?? null,
       venue: (body.venue ?? existing?.venue ?? "").toString().trim(),
       home: {
         ...(existing?.home ?? {}),
@@ -164,7 +170,34 @@ export async function DELETE(req: Request) {
     if (typeof id !== "string") {
       return NextResponse.json({ error: "Missing match id" }, { status: 400 });
     }
+
+    // Read it before it is gone: once the row is deleted there is nothing left
+    // to name it by, and "deleted match 722f82fa" answers nobody's question.
+    const doomed = await getMatch(id);
+    const departments = await getDepartments();
+    const name = (departmentId: string | undefined) =>
+      departments.find((d) => d.id === departmentId)?.shortName ?? "?";
+
     await deleteMatch(id);
+
+    await recordAudit({
+      actor: auth.user,
+      action: "match.delete",
+      targetType: "match",
+      targetId: id,
+      targetLabel: doomed
+        ? `${name(doomed.home.departmentId)} v ${name(doomed.away.departmentId)}`
+        : null,
+      detail: doomed
+        ? {
+            score: `${doomed.home.score}-${doomed.away.score}`,
+            status: doomed.status,
+            round: doomed.round,
+            events: doomed.events.length,
+          }
+        : {},
+    });
+
     return NextResponse.json({ ok: true });
   } catch (err) {
     return NextResponse.json(

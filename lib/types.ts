@@ -82,6 +82,8 @@ export type Department = {
   campus: Campus;
   group: GroupId;
   color: string; // hex, badge + jersey accent
+  /** Null when nobody has been named. Shown on the team profile. */
+  coach?: string | null;
 };
 
 export type MatchStatus = "LIVE" | "UPCOMING" | "FT" | "HT";
@@ -256,6 +258,14 @@ export type Match = {
   stage: MatchStage;
   /** Chosen by the admin once the match is done. */
   manOfTheMatchId?: string | null;
+  /**
+   * Knockout resolution. `home.score`/`away.score` remain the score of the
+   * match including extra time; these say how it was reached.
+   */
+  wentToExtraTime?: boolean;
+  /** Both set, or neither. A shoot-out cannot end level. */
+  homePenalties?: number | null;
+  awayPenalties?: number | null;
   venue: string;
   home: MatchSide;
   away: MatchSide;

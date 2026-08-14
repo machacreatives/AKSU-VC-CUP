@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { MIN_PASSWORD_LENGTH } from "@/lib/password-policy";
 import { Skeleton, SkeletonScreen } from "@/components/Skeleton";
+import PasswordInput from "@/components/PasswordInput";
 
 export default function SetupPage() {
   const router = useRouter();
@@ -123,8 +124,7 @@ export default function SetupPage() {
           <label className="text-[12.5px] font-semibold text-white">
             Password (min {MIN_PASSWORD_LENGTH} characters)
           </label>
-          <input
-            type="password"
+          <PasswordInput
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="w-full rounded-[8px] border border-line bg-surface2 px-3 py-2 text-[14.5px] text-white outline-none focus:border-accent"
@@ -135,8 +135,7 @@ export default function SetupPage() {
 
         <div className="space-y-1">
           <label className="text-[12.5px] font-semibold text-white">Confirm password</label>
-          <input
-            type="password"
+          <PasswordInput
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
             className="w-full rounded-[8px] border border-line bg-surface2 px-3 py-2 text-[14.5px] text-white outline-none focus:border-accent"

@@ -2,7 +2,14 @@ import { NextResponse } from "next/server";
 import { sql } from "@vercel/postgres";
 import crypto from "crypto";
 import { denyUnlessOwnTeam, requireAdmin } from "@/lib/require-admin";
-import { deletePlayer, getDepartments, setSquadRole, upsertPlayer } from "@/lib/db/queries";
+import { recordAudit } from "@/lib/db/audit";
+import {
+  deletePlayer,
+  getDepartments,
+  playerTeamsheetUsage,
+  setSquadRole,
+  upsertPlayer,
+} from "@/lib/db/queries";
 import {
   PLAYER_STATUSES,
   POSITIONS,
@@ -111,10 +118,8 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true, player: { ...player, squadRole } });
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : String(err) },
-      { status: 500 }
-    );
+    console.error("player delete failed:", err instanceof Error ? err.message : err);
+    return NextResponse.json({ error: "Could not remove the player." }, { status: 500 });
   }
 }
 
@@ -131,19 +136,50 @@ export async function DELETE(req: Request) {
     // Deleting took a bare id with no team check at all, so any administrator
     // could remove any player in the tournament.
     const { rows: target } = await sql`
-      SELECT department_id AS "departmentId" FROM players WHERE id = ${id}
+      SELECT name, number, department_id AS "departmentId"
+      FROM players WHERE id = ${id}
     `;
     if (target.length === 0) {
       return NextResponse.json({ error: "Player not found." }, { status: 404 });
     }
     const denied = denyUnlessOwnTeam(auth.user, target[0].departmentId as string);
     if (denied) return denied;
+
+    // A teamsheet is a record of who was on the pitch. Removing the player
+    // would leave their id in it with nothing to resolve to, and the lineup
+    // board would draw a shirt numbered 0 named "Unknown".
+    const usage = await playerTeamsheetUsage(id);
+    if (usage.played.length > 0) {
+      return NextResponse.json(
+        {
+          error: `This player is named in the teamsheet of ${usage.played.length} match${
+            usage.played.length === 1 ? "" : "es"
+          } that has already been played, so they cannot be removed. Mark them as inactive instead.`,
+        },
+        { status: 409 }
+      );
+    }
+
+    // Teamsheets for matches still to come are plans, so their name comes off
+    // those in the same transaction as the delete.
     await deletePlayer(id);
-    return NextResponse.json({ ok: true });
+
+    await recordAudit({
+      actor: auth.user,
+      action: "player.delete",
+      targetType: "player",
+      targetId: id,
+      targetLabel: String(target[0].name),
+      detail: {
+        squadNumber: target[0].number,
+        departmentId: target[0].departmentId,
+        removedFromTeamsheets: usage.upcoming.length,
+      },
+    });
+
+    return NextResponse.json({ ok: true, removedFromTeamsheets: usage.upcoming.length });
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : String(err) },
-      { status: 500 }
-    );
+    console.error("player delete failed:", err instanceof Error ? err.message : err);
+    return NextResponse.json({ error: "Could not remove the player." }, { status: 500 });
   }
 }

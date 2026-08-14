@@ -29,7 +29,11 @@ export default async function Home() {
       standings: computeStandings(matches, departments),
     };
   } catch (err) {
-    return <DbErrorNotice message={err instanceof Error ? err.message : String(err)} />;
+    // Logged here, never sent to the browser in production — the driver
+    // message carries table names and the database hostname.
+    const detail = err instanceof Error ? err.message : String(err);
+    console.error("database read failed:", detail);
+    return <DbErrorNotice message={detail} />;
   }
 
   return (

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireSuperadmin } from "@/lib/require-admin";
+import { recordAudit } from "@/lib/db/audit";
 import { getDepartments } from "@/lib/db/queries";
 import { ADMIN_ROLES, AdminRole } from "@/lib/types";
 import {
@@ -88,6 +89,15 @@ export async function POST(req: Request) {
       role.role,
       role.departmentId
     );
+    await recordAudit({
+      actor: auth.user,
+      action: "user.create",
+      targetType: "user",
+      targetId: user.id,
+      targetLabel: user.username,
+      detail: { role: user.role, departmentId: user.departmentId },
+    });
+
     return NextResponse.json({ ok: true, user });
   } catch (err) {
     if (isUniqueViolation(err)) {
@@ -135,6 +145,27 @@ export async function PATCH(req: Request) {
       departmentId: role.departmentId,
       displayName: typeof body.displayName === "string" ? body.displayName.trim() : undefined,
     });
+    // Only reachable if the row vanished between the lookup above and the
+    // update -- two superadmins editing and deleting the same account at once.
+    if (!user) return NextResponse.json({ error: "Account not found." }, { status: 404 });
+
+    // Only worth a line when the permissions actually moved. Renaming an
+    // account is not a security event, and logging it would dilute the ones
+    // that are.
+    if (target.role !== user.role || target.departmentId !== user.departmentId) {
+      await recordAudit({
+        actor: auth.user,
+        action: "user.role_change",
+        targetType: "user",
+        targetId: user.id,
+        targetLabel: user.username,
+        detail: {
+          from: { role: target.role, departmentId: target.departmentId },
+          to: { role: user.role, departmentId: user.departmentId },
+        },
+      });
+    }
+
     return NextResponse.json({ ok: true, user });
   } catch (err) {
     return NextResponse.json(
@@ -182,6 +213,16 @@ export async function DELETE(req: Request) {
     }
 
     await deleteAdminUser(id);
+
+    await recordAudit({
+      actor: auth.user,
+      action: "user.delete",
+      targetType: "user",
+      targetId: id,
+      targetLabel: target.username,
+      detail: { role: target.role, departmentId: target.departmentId },
+    });
+
     return NextResponse.json({ ok: true });
   } catch (err) {
     return NextResponse.json(

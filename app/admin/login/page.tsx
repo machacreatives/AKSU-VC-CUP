@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import PasswordInput from "@/components/PasswordInput";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -56,8 +57,7 @@ export default function LoginPage() {
         </div>
         <div className="space-y-1">
           <label className="text-[12.5px] font-semibold text-white">Password</label>
-          <input
-            type="password"
+          <PasswordInput
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="w-full rounded-[8px] border border-line bg-surface2 px-3 py-2 text-[14.5px] text-white outline-none focus:border-accent"

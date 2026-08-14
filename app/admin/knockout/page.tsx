@@ -16,6 +16,7 @@ import {
 } from "@/lib/types";
 import { Banner, EmptyState, Notice, PageHeader, RequireSuperadmin, btnOutline, btnPrimary, btnSm, useNotice } from "../ui";
 import MatchForm from "../MatchForm";
+import { tieOutcome, tieWinnerDepartmentId, unresolvedTies } from "@/lib/knockout";
 
 const STATUS_STYLES: Record<string, string> = {
   LIVE: "border-win/40 bg-win/15 text-win",
@@ -59,17 +60,15 @@ function AdminKnockoutPage() {
   const knockout = matches.filter((m) => m.stage && m.stage !== "GROUP");
 
   // Who is top of each group so far — the practical input to drawing a bracket.
-  const standings = sortStandings(computeStandings(matches, departments));
-  const leaders = departments.length
-    ? Array.from(new Set(departments.map((d) => d.group).filter(Boolean)))
-        .map((groupId) => {
-          const rows = standings.filter(
-            (r) => departments.find((d) => d.id === r.departmentId)?.group === groupId
-          );
-          return { groupId, top: rows[0] };
-        })
-        .filter((g) => g.top)
-    : [];
+  // A team that has played nothing is not "topping" anything, so a group with
+  // no results yet is left out rather than naming whoever sorted first.
+  const leaders = Array.from(new Set(departments.map((d) => d.group).filter(Boolean)))
+    .map((groupId) => {
+      const teams = departments.filter((d) => d.group === groupId);
+      const rows = sortStandings(computeStandings(matches, teams, groupId), matches, groupId);
+      return { groupId, top: rows[0] };
+    })
+    .filter((g) => g.top && g.top.played > 0);
 
   if (loading) {
     return (
@@ -102,6 +101,20 @@ function AdminKnockoutPage() {
 
       {error && <Banner tone="error">{error}</Banner>}
       <Notice>{notice}</Notice>
+
+      {/* A tie level at full time decides nothing, and the bracket cannot
+          advance anyone until it is settled. */}
+      {unresolvedTies(matches).length > 0 && (
+        <Banner tone="info">
+          {unresolvedTies(matches).length} tie
+          {unresolvedTies(matches).length === 1 ? "" : "s"} finished level with no shoot-out
+          recorded:{" "}
+          {unresolvedTies(matches)
+            .map((m) => `${team(m.home.departmentId).shortName} v ${team(m.away.departmentId).shortName}`)
+            .join(", ")}
+          . Open the match to record extra time or penalties.
+        </Banner>
+      )}
 
       {creating && (
         <MatchForm
@@ -189,6 +202,26 @@ function AdminKnockoutPage() {
                         <p className="text-[12px] text-white/70">
                           {[m.kickoff, m.venue].filter(Boolean).join(" · ")}
                         </p>
+                        {(() => {
+                          const outcome = tieOutcome(m);
+                          const through = tieWinnerDepartmentId(m);
+                          if (through) {
+                            return (
+                              <p className="text-[12px] font-semibold text-win">
+                                {team(through).name} go through
+                                {outcome.note ? ` (${outcome.note})` : ""}
+                              </p>
+                            );
+                          }
+                          if (outcome.unresolved) {
+                            return (
+                              <p className="text-[12px] font-semibold text-gold">
+                                Level — record extra time or penalties
+                              </p>
+                            );
+                          }
+                          return null;
+                        })()}
                         <div className="flex flex-wrap gap-2 border-t border-line pt-2.5">
                           <Link href={`/admin/matches/${m.id}`} className={`${btnPrimary} ${btnSm}`}>
                             Events &amp; stats

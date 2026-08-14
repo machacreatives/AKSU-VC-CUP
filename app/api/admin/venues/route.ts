@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireSuperadmin } from "@/lib/require-admin";
+import { recordAudit } from "@/lib/db/audit";
 import { countMatchesAtVenue, deleteVenue, getVenues, upsertVenue } from "@/lib/db/queries";
 
 export const dynamic = "force-dynamic";
@@ -88,6 +89,16 @@ export async function DELETE(req: Request) {
     // affected so the count in the confirmation is the real one.
     const fixtures = await countMatchesAtVenue(venue.name);
     await deleteVenue(id);
+
+    await recordAudit({
+      actor: auth.user,
+      action: "venue.delete",
+      targetType: "venue",
+      targetId: id,
+      targetLabel: venue.name,
+      detail: { fixturesNaming: fixtures },
+    });
+
     return NextResponse.json({ ok: true, fixtures });
   } catch (err) {
     return NextResponse.json(

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "@vercel/postgres";
 import { denyUnlessOwnTeam, requireAdmin } from "@/lib/require-admin";
+import { recordAudit } from "@/lib/db/audit";
 import { addMatchEvent, deleteMatchEvent, getMatch } from "@/lib/db/queries";
 import { GOAL_TYPES, GoalType, MatchEventType } from "@/lib/types";
 
@@ -190,6 +191,16 @@ export async function DELETE(req: Request, { params }: { params: { id: string } 
     if (denied) return denied;
 
     await deleteMatchEvent(eventId);
+
+    await recordAudit({
+      actor: auth.user,
+      action: "event.delete",
+      targetType: "event",
+      targetId: String(eventId),
+      targetLabel: `${event.type} ${event.minute}' ${event.playerName ?? ""}`.trim(),
+      detail: { matchId: params.id, departmentId: event.departmentId, type: event.type },
+    });
+
     return NextResponse.json({ ok: true, match: await getMatch(params.id) });
   } catch (err) {
     return NextResponse.json(

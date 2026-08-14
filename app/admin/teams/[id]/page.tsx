@@ -32,6 +32,7 @@ import {
 } from "../../ui";
 import TeamForm from "../TeamForm";
 import CsvImport from "./CsvImport";
+import CoachEditor from "./CoachEditor";
 
 const POSITION_ORDER: Record<PlayerPosition, number> = { GK: 0, DF: 1, MF: 2, FW: 3 };
 
@@ -237,6 +238,10 @@ export default function TeamSquadPage() {
           }}
         />
       )}
+
+      {/* Both roles: a team admin owns their own coach, a superadmin owns
+          every team's. The route enforces it either way. */}
+      <CoachEditor key={team.id} team={team} />
 
       <section className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
