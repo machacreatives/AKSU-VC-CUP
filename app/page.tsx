@@ -3,7 +3,7 @@ import {
   getDepartments,
   getGroups,
   getMatches,
-  getPlayers,
+  getPlayersWithRatings,
 } from "@/lib/db/queries";
 import { DataProvider } from "@/lib/data-context";
 import DbErrorNotice from "@/components/DbErrorNotice";
@@ -18,7 +18,7 @@ export default async function Home() {
     const [departments, matches, players, groups] = await Promise.all([
       getDepartments(),
       getMatches(),
-      getPlayers(),
+      getPlayersWithRatings(),
       getGroups(),
     ]);
     data = {

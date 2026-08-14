@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys, usePlayers } from "@/lib/api";
+import { effectiveManOfTheMatch } from "@/lib/ratings";
 import { Department, Match, Player } from "@/lib/types";
 import { Banner, btnOutline, btnSm, field } from "../../ui";
 
@@ -45,6 +46,14 @@ export default function ManOfTheMatch({
 
   const current = allPlayers.find((p) => p.id === match.manOfTheMatchId);
 
+  // Three goals takes the award whatever the admin chose. Saying so here stops
+  // the picker quietly disagreeing with the star on the public lineup board.
+  const effectiveId = effectiveManOfTheMatch(match);
+  const overriddenBy =
+    effectiveId && effectiveId !== match.manOfTheMatchId
+      ? allPlayers.find((p) => p.id === effectiveId)
+      : undefined;
+
   async function choose(playerId: string) {
     setSaving(true);
     setError("");
@@ -78,6 +87,14 @@ export default function ManOfTheMatch({
       </div>
 
       {error && <Banner tone="error">{error}</Banner>}
+
+      {overriddenBy && (
+        <Banner tone="info">
+          <strong>{overriddenBy.name}</strong> scored a hat-trick, so the award goes to them
+          automatically and they rate 10.0.
+          {current ? ` Your pick of ${current.name} is kept but not shown.` : ""}
+        </Banner>
+      )}
 
       <div className="flex flex-wrap items-center gap-2 rounded-card border border-line bg-surface p-3">
         {nobodyAvailable ? (

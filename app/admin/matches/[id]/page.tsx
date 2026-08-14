@@ -11,6 +11,7 @@ import { queryKeys, useDepartments, useMatch } from "@/lib/api";
 import MatchStatsControls from "./MatchStatsControls";
 import LineupEditor from "./LineupEditor";
 import ManOfTheMatch from "./ManOfTheMatch";
+import MatchRatings from "./MatchRatings";
 import EventForm from "./EventForm";
 import ScoreControls from "../../ScoreControls";
 import { Banner, Notice, btnDanger, btnSm, useNotice } from "../../ui";
@@ -192,6 +193,8 @@ export default function AdminMatchPage() {
       <MatchStatsControls match={match} home={homeTeam} away={awayTeam} />
 
       <ManOfTheMatch match={match} home={homeTeam} away={awayTeam} />
+
+      <MatchRatings match={match} home={homeTeam} away={awayTeam} />
 
       <section className="space-y-2">
         <h2 className="text-[13px] font-bold uppercase tracking-wide text-white">

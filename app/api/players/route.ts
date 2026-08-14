@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
-import { getPlayers } from "@/lib/db/queries";
+import { getPlayersWithRatings } from "@/lib/db/queries";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const players = await getPlayers();
+  // Ratings ride along with the squad — they are derived from matches, so a
+  // bare getPlayers() would serve every player with no rating at all.
+  const players = await getPlayersWithRatings();
   return NextResponse.json(players);
 }
