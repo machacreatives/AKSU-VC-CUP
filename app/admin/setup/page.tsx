@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { MIN_PASSWORD_LENGTH } from "@/lib/password-policy";
+import { Skeleton, SkeletonScreen } from "@/components/Skeleton";
 
 export default function SetupPage() {
   const router = useRouter();
@@ -50,7 +51,25 @@ export default function SetupPage() {
     }
   }
 
-  if (checking) return <div className="px-4 py-6 text-white">Checking…</div>;
+  if (checking) {
+    return (
+      <SkeletonScreen label="Checking whether setup is needed">
+        <div className="flex min-h-[70vh] items-center justify-center px-4 py-10">
+          <div className="w-full max-w-sm space-y-4 rounded-card border border-line bg-surface p-6 shadow-premium lg:max-w-md lg:p-8">
+            <Skeleton className="mx-auto h-5 w-48" />
+            <Skeleton className="mx-auto h-3.5 w-64" />
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="space-y-1">
+                <Skeleton className="h-3 w-24" />
+                <Skeleton className="h-9 w-full rounded-[8px]" />
+              </div>
+            ))}
+            <Skeleton className="h-10 w-full rounded-[8px]" />
+          </div>
+        </div>
+      </SkeletonScreen>
+    );
+  }
 
   if (!needsSetup) {
     return (

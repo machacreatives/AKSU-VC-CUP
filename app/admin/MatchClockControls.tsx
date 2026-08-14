@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Match } from "@/lib/types";
 import { clockPhase, computeClock, REGULATION } from "@/lib/match-clock";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 // Referee controls. The admin starts and ends each half; the minute counts
 // itself. The only number anyone types is the announced added time.
@@ -19,6 +20,7 @@ export default function MatchClockControls({
   match: Match;
   onChange: (m: Match) => void;
 }) {
+  const confirm = useConfirm();
   const [now, setNow] = useState(() => Date.now());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -34,7 +36,11 @@ export default function MatchClockControls({
   const clock = computeClock(match, now);
   const phase = clockPhase(match);
 
-  async function send(action: string, extra: Record<string, unknown> = {}) {
+  async function send(
+    action: string,
+    extra: Record<string, unknown> = {},
+    { throwOnError = false }: { throwOnError?: boolean } = {}
+  ) {
     setBusy(true);
     setError("");
     const res = await fetch(`/api/admin/matches/${match.id}/clock`, {
@@ -44,8 +50,17 @@ export default function MatchClockControls({
     });
     const body = await res.json().catch(() => ({}));
     setBusy(false);
-    if (res.ok && body.match) onChange(body.match);
-    else setError(body.error ?? "Could not update the clock.");
+
+    if (res.ok && body.match) {
+      onChange(body.match);
+      return;
+    }
+
+    const message = body.error ?? "Could not update the clock.";
+    // When the confirmation dialog is driving this, let it own the error so the
+    // message appears next to the button that failed.
+    if (throwOnError) throw new Error(message);
+    setError(message);
   }
 
   const addedForCurrentHalf =
@@ -102,12 +117,25 @@ export default function MatchClockControls({
           <button
             className={`${outline} text-[12px]`}
             disabled={busy}
-            onClick={() => {
-              if (confirm("Reset this match back to not started? The clock will be cleared."))
-                send("reset");
-            }}
+            onClick={() =>
+              confirm({
+                title: "Clear the clock?",
+                body: (
+                  <>
+                    <p>This sets the match back to not started and clears both half timers.</p>
+                    <p>
+                      Scores and events are kept — use <strong>Reset match</strong> to clear those
+                      too.
+                    </p>
+                  </>
+                ),
+                confirmLabel: "Clear clock",
+                busyLabel: "Clearing…",
+                onConfirm: () => send("reset", {}, { throwOnError: true }),
+              })
+            }
           >
-            Reset
+            Reset clock
           </button>
         )}
       </div>

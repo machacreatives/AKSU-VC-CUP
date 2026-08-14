@@ -84,6 +84,19 @@ CREATE TABLE IF NOT EXISTS admin_users (
 
 CREATE INDEX IF NOT EXISTS idx_players_department ON players(department_id);
 CREATE INDEX IF NOT EXISTS idx_match_events_match ON match_events(match_id);
+
+ALTER TABLE players ADD COLUMN IF NOT EXISTS squad_role TEXT NOT NULL DEFAULT 'PLAYER';
+ALTER TABLE players ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'ACTIVE';
+ALTER TABLE players ALTER COLUMN level DROP NOT NULL;
+
+ALTER TABLE players DROP CONSTRAINT IF EXISTS players_squad_role_ck;
+ALTER TABLE players ADD CONSTRAINT players_squad_role_ck CHECK (squad_role IN ('CAPTAIN','VICE_CAPTAIN','PLAYER'));
+
+ALTER TABLE players DROP CONSTRAINT IF EXISTS players_status_ck;
+ALTER TABLE players ADD CONSTRAINT players_status_ck CHECK (status IN ('ACTIVE','INJURED','SUSPENDED'));
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_players_dept_number ON players (department_id, number);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_departments_short_name ON departments (LOWER(short_name));
 `;
 
 // Split for drivers that accept only one statement per call.
@@ -97,3 +110,28 @@ export const SCHEMA_STATEMENTS = SCHEMA_SQL.split("\n")
   .split(";")
   .map((s) => s.trim())
   .filter(Boolean);
+
+import { sql } from "@vercel/postgres";
+
+/**
+ * Apply the schema, reporting which statement failed.
+ *
+ * The statements are replayed on every init, and the loop is NOT transactional
+ * — a failure at statement n leaves the database half-migrated. Every statement
+ * is written to be independently idempotent, but when one does fail the bare
+ * driver error gives no clue which one it was, so wrap it.
+ */
+export async function runSchema(): Promise<{ applied: number }> {
+  for (let i = 0; i < SCHEMA_STATEMENTS.length; i++) {
+    try {
+      await sql.query(SCHEMA_STATEMENTS[i]);
+    } catch (err) {
+      const firstLine = SCHEMA_STATEMENTS[i].split("\n")[0].slice(0, 90);
+      throw new Error(
+        `Schema statement ${i + 1}/${SCHEMA_STATEMENTS.length} failed (${firstLine}): ` +
+          (err instanceof Error ? err.message : String(err))
+      );
+    }
+  }
+  return { applied: SCHEMA_STATEMENTS.length };
+}

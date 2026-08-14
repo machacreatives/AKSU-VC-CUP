@@ -1,6 +1,7 @@
 import { sql } from "@vercel/postgres";
 import { unstable_noStore as noStore } from "next/cache";
-import { Department, Match, MatchEvent, Player, StandingsRow } from "@/lib/types";
+import { Department, Match, MatchEvent, Player, PlayerProfile, StandingsRow } from "@/lib/types";
+import { computeStandings } from "@/lib/standings";
 
 // @vercel/postgres talks to Neon over HTTP, and Next.js patches global fetch
 // with its Data Cache — so query responses were being cached to disk under
@@ -41,7 +42,8 @@ export async function deleteDepartment(id: string) {
 export async function getPlayers(): Promise<Player[]> {
   freshRead();
   const { rows } = await sql`
-    SELECT id, name, number, position, department_id AS "departmentId", level,
+    SELECT id, name, number, position, department_id AS "departmentId",
+           squad_role AS "squadRole", status,
            rating, goals, assists, yellow_cards AS "yellowCards", red_cards AS "redCards"
     FROM players ORDER BY department_id, number
   `;
@@ -54,16 +56,38 @@ export async function getPlayers(): Promise<Player[]> {
   })) as Player[];
 }
 
-export async function upsertPlayer(p: Player) {
+/**
+ * Write the squad record only.
+ *
+ * Takes PlayerProfile, not Player, so the stat counters are structurally out of
+ * reach: this used to write goals/assists/cards from the caller's payload, which
+ * meant saving a player form from stale state wiped whatever had been scored
+ * since the page loaded. Those columns are owned by match events alone.
+ */
+export async function upsertPlayer(p: PlayerProfile) {
   await sql`
-    INSERT INTO players (id, name, number, position, department_id, level, rating, goals, assists, yellow_cards, red_cards)
-    VALUES (${p.id}, ${p.name}, ${p.number}, ${p.position}, ${p.departmentId}, ${p.level}, ${p.rating ?? null}, ${p.goals}, ${p.assists}, ${p.yellowCards}, ${p.redCards})
+    INSERT INTO players (id, name, number, position, department_id, squad_role, status)
+    VALUES (${p.id}, ${p.name}, ${p.number}, ${p.position}, ${p.departmentId}, ${p.squadRole}, ${p.status})
     ON CONFLICT (id) DO UPDATE SET
       name = EXCLUDED.name, number = EXCLUDED.number, position = EXCLUDED.position,
-      department_id = EXCLUDED.department_id, level = EXCLUDED.level, rating = EXCLUDED.rating,
-      goals = EXCLUDED.goals, assists = EXCLUDED.assists,
-      yellow_cards = EXCLUDED.yellow_cards, red_cards = EXCLUDED.red_cards
+      department_id = EXCLUDED.department_id,
+      squad_role = EXCLUDED.squad_role, status = EXCLUDED.status
   `;
+}
+
+/**
+ * A team may have only one captain and one vice-captain, so promoting somebody
+ * has to demote the incumbent. Done as two statements rather than a partial
+ * unique index, which would surface as an opaque 23505 to the admin.
+ */
+export async function setSquadRole(playerId: string, departmentId: string, role: PlayerProfile["squadRole"]) {
+  if (role !== "PLAYER") {
+    await sql`
+      UPDATE players SET squad_role = 'PLAYER'
+      WHERE department_id = ${departmentId} AND squad_role = ${role} AND id <> ${playerId}
+    `;
+  }
+  await sql`UPDATE players SET squad_role = ${role} WHERE id = ${playerId}`;
 }
 
 export async function deletePlayer(id: string) {
@@ -184,7 +208,37 @@ export async function upsertMatch(m: Match) {
   );
 }
 
+// Wipe a match back to a clean slate: no score, no clock, no events.
+//
+// Events are removed one by one through deleteMatchEvent so each one rolls its
+// goal/card back off the player's totals. Deleting the rows in a single
+// statement would leave the Top Scorers table crediting goals from a match
+// that no longer records them.
+export async function resetMatch(id: string) {
+  const { rows } = await sql`SELECT id FROM match_events WHERE match_id = ${id}`;
+  for (const row of rows) {
+    await deleteMatchEvent(row.id as number);
+  }
+
+  await sql`
+    UPDATE matches
+    SET status = 'UPCOMING',
+        minute = NULL,
+        home_score = 0,
+        away_score = 0,
+        first_half_started_at = NULL,
+        second_half_started_at = NULL,
+        first_half_added_minutes = 0,
+        second_half_added_minutes = 0
+    WHERE id = ${id}
+  `;
+}
+
 export async function deleteMatch(id: string) {
+  // match_events cascades on delete, but the players' goal/card totals live on
+  // the players row and would be left crediting a match that no longer exists.
+  // resetMatch removes the events properly first, rolling those totals back.
+  await resetMatch(id);
   await sql`DELETE FROM matches WHERE id = ${id}`;
 }
 
@@ -238,44 +292,5 @@ export async function getStandings(): Promise<StandingsRow[]> {
   return computeStandings(matches, departments);
 }
 
-// Split out so pages that already loaded matches + departments don't re-query.
-export function computeStandings(matches: Match[], departments: Department[]): StandingsRow[] {
-  const table = new Map<string, StandingsRow>();
-  for (const d of departments) {
-    table.set(d.id, {
-      departmentId: d.id,
-      played: 0,
-      won: 0,
-      drawn: 0,
-      lost: 0,
-      goalsFor: 0,
-      goalsAgainst: 0,
-      points: 0,
-      form: [],
-    });
-  }
 
-  for (const m of matches) {
-    if (m.status !== "FT") continue;
-    const home = table.get(m.home.departmentId);
-    const away = table.get(m.away.departmentId);
-    if (!home || !away) continue;
-
-    home.played++; away.played++;
-    home.goalsFor += m.home.score; home.goalsAgainst += m.away.score;
-    away.goalsFor += m.away.score; away.goalsAgainst += m.home.score;
-
-    if (m.home.score > m.away.score) {
-      home.won++; home.points += 3; away.lost++;
-      home.form.push("W"); away.form.push("L");
-    } else if (m.home.score < m.away.score) {
-      away.won++; away.points += 3; home.lost++;
-      away.form.push("W"); home.form.push("L");
-    } else {
-      home.drawn++; away.drawn++; home.points++; away.points++;
-      home.form.push("D"); away.form.push("D");
-    }
-  }
-
-  return Array.from(table.values());
-}
+export { computeStandings };

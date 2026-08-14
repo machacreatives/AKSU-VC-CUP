@@ -31,9 +31,18 @@ function MetricValue({ player, metric }: { player: Player; metric: Metric }) {
   );
 }
 
-const LIMIT = 12;
+const PUBLIC_LIMIT = 12;
 
-export default function StatList({ players, metric }: { players: Player[]; metric: Metric }) {
+export default function StatList({
+  players,
+  metric,
+  limit = PUBLIC_LIMIT,
+}: {
+  players: Player[];
+  metric: Metric;
+  /** The public tabs show a top 12; admin passes Infinity to see everyone. */
+  limit?: number;
+}) {
   const getDepartment = useDepartmentLookup();
 
   if (players.length === 0) {
@@ -44,7 +53,7 @@ export default function StatList({ players, metric }: { players: Player[]; metri
     );
   }
 
-  const shown = players.slice(0, LIMIT);
+  const shown = Number.isFinite(limit) ? players.slice(0, limit) : players;
 
   return (
     // One column on phones. On large screens the rows flow into two columns

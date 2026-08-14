@@ -1,12 +1,23 @@
 "use client";
 
 import { useState } from "react";
+import { useMatches, usePlayers } from "@/lib/api";
+import { computeStandings } from "@/lib/standings";
 import TabBar from "@/components/TabBar";
 import MatchCard from "@/components/MatchCard";
 import StandingsTable from "@/components/StandingsTable";
 import StatList from "@/components/StatList";
 import KnockoutBracket from "@/components/KnockoutBracket";
-import { Campus, Department, GroupId, Match, Player, StandingsRow } from "@/lib/types";
+import {
+  CAMPUS_GROUPS,
+  CAMPUS_LABELS,
+  Campus,
+  Department,
+  GroupId,
+  Match,
+  Player,
+  StandingsRow,
+} from "@/lib/types";
 
 type TabId = "matches" | "table" | "knockout" | "scorers" | "assists" | "ratings" | "cards";
 
@@ -20,24 +31,38 @@ const tabs: { id: TabId; label: string }[] = [
   { id: "cards", label: "Cards" },
 ];
 
-const campusGroups: Record<Campus, GroupId[]> = {
-  main: ["A", "B"],
-  obioakpa: ["C", "D"],
-};
+// "all" shows every group at once; the campus options narrow it down.
+type CampusFilter = "all" | Campus;
+
+const campusFilters: { id: CampusFilter; label: string }[] = [
+  { id: "all", label: "All groups" },
+  { id: "main", label: CAMPUS_LABELS.main },
+  { id: "obioakpa", label: CAMPUS_LABELS.obioakpa },
+];
 
 export default function HomeTabs({
-  matches,
-  standings,
+  matches: initialMatches,
+  standings: initialStandings,
   departments,
-  players,
+  players: initialPlayers,
 }: {
   matches: Match[];
   standings: StandingsRow[];
   departments: Department[];
   players: Player[];
 }) {
+  // Seeded from the server render, then kept fresh in the background. Nothing
+  // is re-fetched on arrival, so there is no flash of loading on a page that
+  // already has its data.
+  const { data: matches = initialMatches } = useMatches({ initialData: initialMatches });
+  const { data: players = initialPlayers } = usePlayers({ initialData: initialPlayers });
+
+  // Recomputed from whatever matches the cache currently holds, so the table
+  // moves with the scores instead of staying on the server snapshot.
+  const standings =
+    matches === initialMatches ? initialStandings : computeStandings(matches, departments);
   const [tab, setTab] = useState<TabId>("matches");
-  const [campus, setCampus] = useState<Campus>("main");
+  const [campus, setCampus] = useState<CampusFilter>("all");
 
   const live = matches.filter((m) => m.status === "LIVE" || m.status === "HT");
   const upcoming = matches.filter((m) => m.status === "UPCOMING");
@@ -108,27 +133,39 @@ export default function HomeTabs({
         )}
 
         {tab === "table" && (
-          <section className="space-y-3">
-            <div className="flex gap-2 lg:max-w-md">
-              {(["main", "obioakpa"] as Campus[]).map((c) => (
+          <section className="space-y-4">
+            <div className="flex flex-wrap gap-2 lg:max-w-2xl">
+              {campusFilters.map((f) => (
                 <button
-                  key={c}
-                  onClick={() => setCampus(c)}
-                  className={`flex-1 rounded-card border px-3 py-2 text-[13.5px] font-bold transition-colors ${
-                    campus === c
+                  key={f.id}
+                  onClick={() => setCampus(f.id)}
+                  className={`min-w-[6.5rem] flex-1 rounded-card border px-3 py-2 text-[13px] font-bold transition-colors lg:text-[13.5px] ${
+                    campus === f.id
                       ? "border-accent bg-accent/15 text-white"
                       : "border-line bg-surface text-white"
                   }`}
                 >
-                  {c === "main" ? "Main Campus" : "Obio Akpa Campus"}
+                  {f.label}
                 </button>
               ))}
             </div>
-            <div className="grid gap-3 lg:grid-cols-2">
-              {campusGroups[campus].map((g) => (
-                <StandingsTable key={g} rows={rowsForGroup(g)} title={`Group ${g}`} />
-              ))}
-            </div>
+
+            {/* On "all" the groups stay grouped under their campus, so it is
+                still obvious which table belongs where. */}
+            {(campus === "all" ? (["main", "obioakpa"] as Campus[]) : [campus]).map((c) => (
+              <div key={c} className="space-y-3">
+                {campus === "all" && (
+                  <h3 className="px-1 text-[12.5px] font-extrabold uppercase tracking-wide text-accent">
+                    {CAMPUS_LABELS[c]}
+                  </h3>
+                )}
+                <div className="grid gap-3 lg:grid-cols-2">
+                  {CAMPUS_GROUPS[c].map((g) => (
+                    <StandingsTable key={g} rows={rowsForGroup(g)} title={`Group ${g}`} />
+                  ))}
+                </div>
+              </div>
+            ))}
           </section>
         )}
 

@@ -1,42 +1,36 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Match, Department } from "@/lib/types";
-import AccountSection from "./AccountSection";
+import { useConfirm } from "@/components/ConfirmDialog";
+import { queryKeys, useDepartments, useMatches } from "@/lib/api";
+import { useQueryClient } from "@tanstack/react-query";
 import MatchClockControls from "./MatchClockControls";
+import { Skeleton, SkeletonCard, SkeletonScreen } from "@/components/Skeleton";
+import NewMatchForm from "./NewMatchForm";
 
 export default function AdminDashboard() {
-  const router = useRouter();
-  const [matches, setMatches] = useState<Match[]>([]);
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [initialising, setInitialising] = useState(false);
+  const confirm = useConfirm();
+  const queryClient = useQueryClient();
+  const matchesQuery = useMatches();
+  const departmentsQuery = useDepartments();
+
+  const matches: Match[] = matchesQuery.data ?? [];
+  const departments: Department[] = departmentsQuery.data ?? [];
+  const loading = matchesQuery.isPending || departmentsQuery.isPending;
+
+  const [localError, setLocalError] = useState("");
   const [notice, setNotice] = useState("");
+  const [showNewMatch, setShowNewMatch] = useState(false);
+  const error = localError || matchesQuery.error?.message || departmentsQuery.error?.message || "";
+  const setError = setLocalError;
 
-  const load = useCallback(async () => {
-    setError("");
-    try {
-      const [mRes, dRes] = await Promise.all([fetch("/api/matches"), fetch("/api/departments")]);
-      if (!mRes.ok || !dRes.ok) {
-        throw new Error(
-          "Could not read from the database. If the tables do not exist yet, create them below."
-        );
-      }
-      setMatches(await mRes.json());
-      setDepartments(await dRes.json());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
+  // Writes elsewhere on the page invalidate rather than hand-patching, so the
+  // list cannot drift from what the database actually holds.
+  const load = () => queryClient.invalidateQueries({ queryKey: queryKeys.matches });
+  const setMatches = (updater: (prev: Match[]) => Match[]) =>
+    queryClient.setQueryData<Match[]>(queryKeys.matches, (prev) => updater(prev ?? []));
 
   function deptName(id: string) {
     return departments.find((d) => d.id === id)?.shortName ?? id;
@@ -66,48 +60,82 @@ export default function AdminDashboard() {
     }
   }
 
-  async function initDb() {
-    setInitialising(true);
-    setNotice("");
-    setError("");
-    const res = await fetch("/api/admin/init-db", { method: "POST" });
-    const body = await res.json().catch(() => ({}));
-    setInitialising(false);
-    if (res.ok) {
-      const t = body.tables ?? {};
-      setNotice(
-        `Tables ready — currently holding ${t.departments ?? 0} departments, ${t.players ?? 0} players, ${t.matches ?? 0} matches.`
-      );
-      load();
-    } else {
-      setError(body.error ?? "Could not create the tables.");
-    }
+  async function resetMatchCompletely(m: Match) {
+    // The dialog runs the request itself so the button can show progress and
+    // the modal stays put until the write actually lands.
+    let updated: Match | null = null;
+
+    const ok = await confirm({
+      title: `Reset ${deptName(m.home.departmentId)} vs ${deptName(m.away.departmentId)}?`,
+      body: (
+        <>
+          <p>The score returns to 0-0, the clock is cleared and every recorded event is removed.</p>
+          <p>The players&apos; goal and card totals are rolled back too. The fixture itself is kept.</p>
+        </>
+      ),
+      confirmLabel: "Reset match",
+      busyLabel: "Resetting…",
+      tone: "danger",
+      onConfirm: async () => {
+        const res = await fetch(`/api/admin/matches/${m.id}/reset`, { method: "POST" });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok || !body.match) throw new Error(body.error ?? "Could not reset the match.");
+        updated = body.match;
+      },
+    });
+    if (!ok || !updated) return;
+
+    const next = updated as Match;
+    setMatches((prev) => prev.map((x) => (x.id === m.id ? next : x)));
+    setNotice("Match reset.");
   }
 
-  async function logout() {
-    await fetch("/api/admin/logout", { method: "POST" });
-    router.push("/admin/login");
-    router.refresh();
+  async function removeMatch(m: Match) {
+    const ok = await confirm({
+      title: `Delete ${deptName(m.home.departmentId)} vs ${deptName(m.away.departmentId)}?`,
+      body: <p>This removes the fixture entirely and cannot be undone.</p>,
+      confirmLabel: "Delete match",
+      busyLabel: "Deleting…",
+      tone: "danger",
+      onConfirm: async () => {
+        const res = await fetch("/api/admin/matches", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: m.id }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.error ?? "Could not delete the match.");
+      },
+    });
+    if (!ok) return;
+
+    setMatches((prev) => prev.filter((x) => x.id !== m.id));
+    setNotice("Match deleted.");
   }
 
-  if (loading) return <div className="px-4 py-6 text-white">Loading...</div>;
+
+
+  if (loading) {
+    return (
+      <SkeletonScreen label="Loading matches">
+        <div className="mx-auto max-w-5xl space-y-5 px-4 py-5 lg:px-6 lg:py-7">
+          <div className="flex items-center justify-between">
+            <Skeleton className="h-6 w-32" />
+            <Skeleton className="h-9 w-28 rounded-[8px]" />
+          </div>
+          <div className="grid gap-2 xl:grid-cols-2">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <SkeletonCard key={i} />
+            ))}
+          </div>
+        </div>
+      </SkeletonScreen>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-5xl space-y-5 px-4 py-5 lg:px-6 lg:py-7">
-      <div className="flex items-center justify-between">
-        <h1 className="text-[18px] font-extrabold text-white lg:text-[22px]">Admin Dashboard</h1>
-        <div className="flex items-center gap-2">
-          <Link href="/" className="rounded-full border border-line px-3 py-1.5 text-[13px] font-bold text-white">
-            View site
-          </Link>
-          <button
-            onClick={logout}
-            className="rounded-full border border-line px-3 py-1.5 text-[13px] font-bold text-white"
-          >
-            Log out
-          </button>
-        </div>
-      </div>
+      <h1 className="text-[18px] font-extrabold text-white lg:text-[22px]">Matches</h1>
 
       {error && (
         <p className="rounded-card border border-loss/40 bg-loss/10 px-3 py-2 text-[13.5px] font-medium text-white">
@@ -120,11 +148,34 @@ export default function AdminDashboard() {
         </p>
       )}
 
-      <section className="space-y-2">
-        <h2 className="px-1 text-[13px] font-bold uppercase tracking-wide text-white">Matches</h2>
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="px-1 text-[13px] font-bold uppercase tracking-wide text-white">Matches</h2>
+          {!showNewMatch && (
+            <button
+              onClick={() => setShowNewMatch(true)}
+              className="rounded-[8px] bg-accent px-4 py-2 text-[13.5px] font-bold text-white"
+            >
+              + New match
+            </button>
+          )}
+        </div>
+
+        {showNewMatch && (
+          <NewMatchForm
+            departments={departments}
+            onClose={() => setShowNewMatch(false)}
+            onCreated={(created) => {
+              setMatches((prev) => [...prev, created]);
+              setNotice("Match created.");
+            }}
+          />
+        )}
 
         {matches.length === 0 && !error && (
-          <p className="text-[14px] text-white">No matches in the database yet.</p>
+          <p className="text-[14px] text-white">
+            No matches yet — use <span className="font-bold">+ New match</span> to add the first fixture.
+          </p>
         )}
 
         <div className="grid gap-2 xl:grid-cols-2">
@@ -134,9 +185,20 @@ export default function AdminDashboard() {
                 <span className="text-[14px] font-semibold text-white">
                   {deptName(m.home.departmentId)} vs {deptName(m.away.departmentId)}
                 </span>
-                <Link href={`/admin/matches/${m.id}`} className="text-[12.5px] font-bold text-accent">
-                  Edit lineups &amp; events &rarr;
-                </Link>
+                <div className="flex items-center gap-3">
+                  <Link href={`/admin/matches/${m.id}`} className="text-[12.5px] font-bold text-accent">
+                    Edit lineups &amp; events &rarr;
+                  </Link>
+                  <button
+                    onClick={() => resetMatchCompletely(m)}
+                    className="text-[12px] font-bold text-white underline decoration-line underline-offset-2"
+                  >
+                    Reset match
+                  </button>
+                  <button onClick={() => removeMatch(m)} className="text-[12px] font-bold text-loss">
+                    Delete
+                  </button>
+                </div>
               </div>
               <MatchClockControls
                 match={m}
@@ -166,22 +228,6 @@ export default function AdminDashboard() {
         </div>
       </section>
 
-      <AccountSection />
-
-      <section className="space-y-2 border-t border-line pt-4">
-        <h2 className="px-1 text-[13px] font-bold uppercase tracking-wide text-white">Database</h2>
-        <p className="text-[13.5px] text-white">
-          Creates the tables if they are missing. Safe to re-run — it never touches rows that
-          already exist.
-        </p>
-        <button
-          onClick={initDb}
-          disabled={initialising}
-          className="rounded-[8px] bg-accent px-4 py-2 text-[14px] font-bold text-white disabled:opacity-50"
-        >
-          {initialising ? "Creating tables..." : "Initialise database"}
-        </button>
-      </section>
     </div>
   );
 }

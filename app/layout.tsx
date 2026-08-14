@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Barlow_Condensed } from "next/font/google";
 import "./globals.css";
 import Header from "@/components/Header";
+import Providers from "./providers";
 
 // D-DIN is a commercial font with no free/Google Fonts license, so it can't
 // be loaded here. Barlow Condensed is the closest free match — same
@@ -24,10 +25,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Widens in steps rather than jumping straight from phone to desktop,
             so tablets don't sit inside a 512px column with empty space either
             side. Header uses the identical ladder so the two stay aligned. */}
-        <div className="mx-auto min-h-screen w-full max-w-lg border-x border-line/60 md:max-w-2xl lg:max-w-5xl xl:max-w-6xl">
-          <Header />
-          <main>{children}</main>
-        </div>
+        <Providers>
+          <div className="mx-auto min-h-screen w-full max-w-lg border-x border-line/60 md:max-w-2xl lg:max-w-5xl xl:max-w-6xl">
+            <Header />
+            <main>{children}</main>
+          </div>
+        </Providers>
       </body>
     </html>
   );

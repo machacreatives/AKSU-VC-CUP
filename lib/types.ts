@@ -2,6 +2,27 @@ export type Campus = "main" | "obioakpa";
 
 export type GroupId = "A" | "B" | "C" | "D";
 
+// Which groups belong to which campus is fixed by the tournament format. This
+// used to be duplicated inside app/HomeTabs.tsx, where the Table tab filtered
+// by group alone — so a team whose campus and group disagreed rendered under
+// the wrong campus. One definition, used by the UI and the API validation.
+export const CAMPUS_GROUPS: Record<Campus, GroupId[]> = {
+  main: ["A", "B"],
+  obioakpa: ["C", "D"],
+};
+
+export const GROUP_CAMPUS: Record<GroupId, Campus> = {
+  A: "main",
+  B: "main",
+  C: "obioakpa",
+  D: "obioakpa",
+};
+
+export const CAMPUS_LABELS: Record<Campus, string> = {
+  main: "Main Campus",
+  obioakpa: "Obio Akpa Campus",
+};
+
 export type Department = {
   id: string;
   name: string;
@@ -15,19 +36,50 @@ export type Department = {
 export type MatchStatus = "LIVE" | "UPCOMING" | "FT" | "HT";
 
 export type PlayerPosition = "GK" | "DF" | "MF" | "FW";
+export type SquadRole = "CAPTAIN" | "VICE_CAPTAIN" | "PLAYER";
+export type PlayerStatus = "ACTIVE" | "INJURED" | "SUSPENDED";
 
-export type Player = {
+export const POSITIONS: PlayerPosition[] = ["GK", "DF", "MF", "FW"];
+export const SQUAD_ROLES: SquadRole[] = ["CAPTAIN", "VICE_CAPTAIN", "PLAYER"];
+export const PLAYER_STATUSES: PlayerStatus[] = ["ACTIVE", "INJURED", "SUSPENDED"];
+
+export const SQUAD_ROLE_LABELS: Record<SquadRole, string> = {
+  CAPTAIN: "Captain",
+  VICE_CAPTAIN: "Vice-captain",
+  PLAYER: "Player",
+};
+
+export const PLAYER_STATUS_LABELS: Record<PlayerStatus, string> = {
+  ACTIVE: "Active",
+  INJURED: "Injured",
+  SUSPENDED: "Suspended",
+};
+
+/**
+ * The squad record an administrator actually owns and edits.
+ *
+ * Deliberately separate from `Player`: the write path takes this type, so it
+ * is a compile error for a squad edit to carry goals or cards. Saving a player
+ * form from stale state used to overwrite whatever had been scored since the
+ * page loaded, because upsertPlayer wrote the counters too.
+ */
+export type PlayerProfile = {
   id: string;
   name: string;
   number: number;
   position: PlayerPosition;
   departmentId: string;
-  level: string; // e.g. "300L"
-  rating?: number;
+  squadRole: SquadRole;
+  status: PlayerStatus;
+};
+
+/** Read model: the profile plus everything counted from match events. */
+export type Player = PlayerProfile & {
   goals: number;
   assists: number;
   yellowCards: number;
   redCards: number;
+  rating?: number;
 };
 
 export type MatchEvent = {

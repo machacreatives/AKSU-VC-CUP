@@ -1,7 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { MIN_PASSWORD_LENGTH } from "@/lib/password-policy";
+import { useConfirm } from "@/components/ConfirmDialog";
+import { api, queryKeys } from "@/lib/api";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 type AdminUser = {
   id: string;
@@ -20,7 +23,13 @@ function formatDate(value: string | null) {
 }
 
 export default function AccountSection() {
-  const [users, setUsers] = useState<AdminUser[]>([]);
+  const confirm = useConfirm();
+  const queryClient = useQueryClient();
+  const usersQuery = useQuery({
+    queryKey: queryKeys.adminUsers,
+    queryFn: () => api.getJson<AdminUser[]>("/api/admin/users"),
+  });
+  const users: AdminUser[] = usersQuery.data ?? [];
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -33,14 +42,7 @@ export default function AccountSection() {
   const [newPassword, setNewPassword] = useState("");
   const [changing, setChanging] = useState(false);
 
-  const load = useCallback(async () => {
-    const res = await fetch("/api/admin/users");
-    if (res.ok) setUsers(await res.json());
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
+  const load = () => queryClient.invalidateQueries({ queryKey: queryKeys.adminUsers });
 
   async function addUser(e: React.FormEvent) {
     e.preventDefault();
@@ -66,20 +68,27 @@ export default function AccountSection() {
   }
 
   async function removeUser(id: string, name: string) {
-    setError("");
-    setNotice("");
-    const res = await fetch("/api/admin/users", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
+    const ok = await confirm({
+      title: `Remove ${name}?`,
+      body: <p>They will no longer be able to sign in, and any active session is cut off.</p>,
+      confirmLabel: "Remove administrator",
+      busyLabel: "Removing…",
+      tone: "danger",
+      onConfirm: async () => {
+        const res = await fetch("/api/admin/users", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.error ?? "Could not remove the account.");
+      },
     });
-    const body = await res.json().catch(() => ({}));
-    if (res.ok) {
-      setNotice(`Removed ${name}.`);
-      load();
-    } else {
-      setError(body.error ?? "Could not remove the account.");
-    }
+    if (!ok) return;
+
+    setError("");
+    setNotice(`Removed ${name}.`);
+    load();
   }
 
   async function changePassword(e: React.FormEvent) {
