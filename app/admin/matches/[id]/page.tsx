@@ -4,40 +4,41 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Match, MatchEvent, Department } from "@/lib/types";
+import { Skeleton, SkeletonRows, SkeletonScreen } from "@/components/Skeleton";
+import { queryKeys, useDepartments, useMatch } from "@/lib/api";
+import { useQueryClient } from "@tanstack/react-query";
 
 export default function AdminMatchPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const [match, setMatch] = useState<Match | null>(null);
-  const [departments, setDepartments] = useState<Department[]>([]);
+  const queryClient = useQueryClient();
+  const matchQuery = useMatch(params.id);
+  const departmentsQuery = useDepartments();
+
+  const match = matchQuery.data ?? null;
+  const departments: Department[] = departmentsQuery.data ?? [];
+
   const [minute, setMinute] = useState("");
   const [type, setType] = useState<MatchEvent["type"]>("GOAL");
   const [deptId, setDeptId] = useState("");
   const [playerName, setPlayerName] = useState("");
   const [detail, setDetail] = useState("");
-  const [error, setError] = useState("");
+  const [localError, setLocalError] = useState("");
 
-  async function load() {
-    setError("");
-    try {
-      const [mRes, dRes] = await Promise.all([
-        fetch(`/api/matches/${params.id}`),
-        fetch("/api/departments"),
-      ]);
-      if (!mRes.ok) throw new Error("Could not load this match from the database.");
-      const m: Match = await mRes.json();
-      setMatch(m);
-      setDepartments(dRes.ok ? await dRes.json() : []);
-      if (!deptId) setDeptId(m.home.departmentId);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  }
+  const error = localError || matchQuery.error?.message || departmentsQuery.error?.message || "";
+  const setError = setLocalError;
 
+  // Adding or removing an event changes this match and, once scores derive from
+  // events, the list too — so both caches are refreshed.
+  const load = async () => {
+    await queryClient.invalidateQueries({ queryKey: queryKeys.match(params.id) });
+    await queryClient.invalidateQueries({ queryKey: queryKeys.matches });
+  };
+
+  // The team select defaults to the home side once the match arrives.
   useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.id]);
+    if (match && !deptId) setDeptId(match.home.departmentId);
+  }, [match, deptId]);
 
   async function addEvent(e: React.FormEvent) {
     e.preventDefault();
@@ -70,7 +71,20 @@ export default function AdminMatchPage() {
       </div>
     );
 
-  if (!match) return <div className="px-4 py-6 text-white">Loading...</div>;
+  if (!match) {
+    return (
+      <SkeletonScreen label="Loading match">
+        <div className="mx-auto max-w-4xl space-y-5 px-4 py-5 lg:px-6 lg:py-7">
+          <Skeleton className="h-3.5 w-36" />
+          <Skeleton className="h-6 w-56" />
+          <Skeleton className="h-3.5 w-24" />
+          <Skeleton className="h-[54px] w-full rounded-card" />
+          <Skeleton className="h-3.5 w-20" />
+          <SkeletonRows rows={4} />
+        </div>
+      </SkeletonScreen>
+    );
+  }
 
   function deptName(id: string) {
     return departments.find((d) => d.id === id)?.shortName ?? id;

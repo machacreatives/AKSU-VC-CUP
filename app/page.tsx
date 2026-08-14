@@ -1,6 +1,5 @@
 import { computeStandings, getDepartments, getMatches, getPlayers } from "@/lib/db/queries";
 import { DataProvider } from "@/lib/data-context";
-import AutoRefresh from "@/components/AutoRefresh";
 import DbErrorNotice from "@/components/DbErrorNotice";
 import HomeTabs from "./HomeTabs";
 
@@ -22,7 +21,6 @@ export default async function Home() {
 
   return (
     <DataProvider departments={data.departments} players={data.players} serverNow={Date.now()}>
-      <AutoRefresh />
       <HomeTabs
         matches={data.matches}
         standings={data.standings}

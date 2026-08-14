@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { sql } from "@vercel/postgres";
-import { SCHEMA_STATEMENTS } from "@/lib/db/schema";
+import { runSchema } from "@/lib/db/schema";
 import { requireAdmin } from "@/lib/require-admin";
 
 export const dynamic = "force-dynamic";
@@ -15,9 +15,7 @@ export async function POST() {
   if (auth.response) return auth.response;
 
   try {
-    for (const stmt of SCHEMA_STATEMENTS) {
-      await sql.query(stmt);
-    }
+    await runSchema();
 
     const { rows } = await sql`
       SELECT

@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { sql } from "@vercel/postgres";
 import { COOKIE_NAME, createSessionToken, sessionCookieOptions } from "@/lib/auth";
-import { SCHEMA_STATEMENTS } from "@/lib/db/schema";
+import { runSchema } from "@/lib/db/schema";
 import { countAdminUsers, createAdminUser, isUniqueViolation } from "@/lib/db/users";
 import { validatePassword } from "@/lib/password";
 
@@ -12,9 +11,7 @@ export const dynamic = "force-dynamic";
 // in. Setup breaks that deadlock by ensuring the schema itself. Every
 // statement is CREATE ... IF NOT EXISTS, so it never touches existing data.
 async function ensureSchema() {
-  for (const stmt of SCHEMA_STATEMENTS) {
-    await sql.query(stmt);
-  }
+  await runSchema();
 }
 
 // First-run bootstrap. Creates the very first administrator, and only while
