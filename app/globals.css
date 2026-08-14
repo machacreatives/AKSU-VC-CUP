@@ -79,6 +79,19 @@ button:focus-visible {
   animation: skeleton-sweep 1.6s infinite;
 }
 
+/* Admin confirmations arrive and leave on their own, so they need to announce
+   themselves rather than silently appearing in the middle of the page. */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .pulse-live {
     animation: none;
@@ -88,8 +101,37 @@ button:focus-visible {
   .skeleton::after {
     animation: none;
   }
+
+  [class*="animate-"] {
+    animation: none !important;
+  }
 }
 
 .crest-glow {
   filter: drop-shadow(0 0 14px rgba(242, 102, 31, 0.25));
+}
+
+/* Number inputs are used here for scores, shirt numbers and stat counters, and
+   every one of them sits next to purpose-built −/+ buttons or is only ever
+   typed into. The browser's own spinners are tiny, ugly against the dark
+   surface, and scroll the value by accident. */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* The dark theme leaves the native calendar/clock icon almost invisible. */
+input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  opacity: 0.65;
+  cursor: pointer;
 }

@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Banner, PageHeader, btnPrimary } from "../ui";
+import { Banner, Notice, PageHeader, btnPrimary, useNotice } from "../ui";
 import AccountSection from "../AccountSection";
+import VenueSection from "../VenueSection";
 
 export default function SettingsPage() {
   const [initialising, setInitialising] = useState(false);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useNotice();
 
   async function initDb() {
     setInitialising(true);
@@ -28,12 +29,14 @@ export default function SettingsPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-5 px-4 py-5 lg:px-6 lg:py-7">
-      <PageHeader title="Settings" subtitle="Administrators and database." />
+      <PageHeader title="Settings" subtitle="Administrators, venues and database." />
 
       {error && <Banner tone="error">{error}</Banner>}
-      {notice && <Banner tone="success">{notice}</Banner>}
+      <Notice>{notice}</Notice>
 
       <AccountSection />
+
+      <VenueSection />
 
       <section className="space-y-2 border-t border-line pt-4">
         <h2 className="px-1 text-[13px] font-bold uppercase tracking-wide text-white">Database</h2>

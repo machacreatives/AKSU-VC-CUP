@@ -35,8 +35,18 @@ export default function EventTimeline({ match }: { match: Match }) {
             <span className="tabular w-8 shrink-0 font-semibold text-white">{e.minute}&apos;</span>
             <EventIcon type={e.type} />
             <div className="min-w-0 flex-1">
-              <p className="truncate font-semibold text-white">{e.playerName}</p>
-              {e.detail && <p className="truncate text-[12.5px] text-white">{e.detail}</p>}
+              {/* A substitution reads from the player coming on, the way a
+                  broadcast graphic does — the arrow off is the detail. */}
+              <p className="truncate font-semibold text-white">
+                {e.type === "SUB" && e.subInPlayerName ? e.subInPlayerName : e.playerName}
+              </p>
+              {e.type === "SUB" && e.subInPlayerName && (
+                <p className="truncate text-[12.5px] text-white/70">↓ {e.playerName}</p>
+              )}
+              {e.assistPlayerName && (
+                <p className="truncate text-[12.5px] text-white/70">assist {e.assistPlayerName}</p>
+              )}
+              {e.detail && <p className="truncate text-[12.5px] text-white/70">{e.detail}</p>}
             </div>
           </div>
         );

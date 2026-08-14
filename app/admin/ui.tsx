@@ -1,5 +1,7 @@
 "use client";
 
+import { useCallback, useEffect, useRef, useState } from "react";
+
 // Shared admin form furniture. These class strings were duplicated verbatim
 // across NewMatchForm and AccountSection; every new screen would have copied
 // them again.
@@ -13,11 +15,74 @@ export const fieldFull = `${field} w-full`;
 
 export const label = "text-[12px] font-semibold uppercase tracking-wide text-white";
 
-export const btnPrimary =
-  "rounded-[8px] bg-accent px-4 py-2 text-[13.5px] font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-50";
+// Buttons. Everything an administrator can click is one of these — actions
+// used to be bare coloured text, which read as body copy and gave no hit area
+// worth aiming at on a phone. `btnBase` fixes the height and alignment so a row
+// of mixed variants lines up.
+const btnBase =
+  "inline-flex select-none items-center justify-center gap-1.5 rounded-[8px] px-4 py-2 text-[13.5px] font-bold leading-none transition-colors disabled:cursor-not-allowed disabled:opacity-50";
 
-export const btnOutline =
-  "rounded-[8px] border border-line px-4 py-2 text-[13.5px] font-bold text-white transition-colors hover:bg-surface2 disabled:opacity-50";
+export const btnPrimary = `${btnBase} bg-accent text-white shadow-[0_1px_0_rgba(255,255,255,0.12)_inset] hover:bg-accent/90 active:bg-accent`;
+
+export const btnOutline = `${btnBase} border border-line bg-surface text-white hover:border-white/25 hover:bg-surface2`;
+
+/** Filled but quiet — for secondary actions sitting beside a primary one. */
+export const btnSecondary = `${btnBase} border border-line bg-surface2 text-white hover:border-white/25 hover:bg-surface3`;
+
+/** Destructive. Outlined until hover so a delete never dominates a card. */
+export const btnDanger = `${btnBase} border border-loss/50 bg-loss/10 text-loss hover:bg-loss/20`;
+
+/** Same shapes, tightened for dense rows inside cards. */
+export const btnSm = "px-3 py-1.5 text-[12.5px]";
+
+/**
+ * A success message that clears itself.
+ *
+ * "Event added." used to sit on the page until something else replaced it, so
+ * after a busy ten minutes the admin was looking at a confirmation for an
+ * action they had long forgotten — and adding the same event twice showed no
+ * change at all, because the banner never went away to come back.
+ *
+ * Setting the same text twice restarts the countdown, and re-announces it to a
+ * screen reader, by way of the tick suffix on the returned key.
+ */
+export function useNotice(timeoutMs = 6000) {
+  const [notice, setNoticeState] = useState("");
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clear = useCallback(() => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+  }, []);
+
+  const setNotice = useCallback(
+    (message: string) => {
+      clear();
+      setNoticeState(message);
+      if (message) timer.current = setTimeout(() => setNoticeState(""), timeoutMs);
+    },
+    [clear, timeoutMs]
+  );
+
+  // Without this a pending timer fires after the page has gone, setting state
+  // on an unmounted component.
+  useEffect(() => clear, [clear]);
+
+  return [notice, setNotice] as const;
+}
+
+/** Success banner that fades out with the notice it carries. */
+export function Notice({ children }: { children: React.ReactNode }) {
+  if (!children) return null;
+  return (
+    <p
+      role="status"
+      className="animate-[fade-in_180ms_ease-out] rounded-card border border-win/40 bg-win/10 px-3 py-2 text-[13.5px] font-medium text-white"
+    >
+      {children}
+    </p>
+  );
+}
 
 export function Banner({ tone, children }: { tone: "error" | "success" | "info"; children: React.ReactNode }) {
   const styles = {

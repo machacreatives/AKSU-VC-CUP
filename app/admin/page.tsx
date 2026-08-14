@@ -2,13 +2,51 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Match, Department } from "@/lib/types";
+import { Match, Department, MatchStatus } from "@/lib/types";
+import DeptBadge from "@/components/DeptBadge";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { queryKeys, useDepartments, useMatches } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 import MatchClockControls from "./MatchClockControls";
+import ScoreControls from "./ScoreControls";
 import { Skeleton, SkeletonCard, SkeletonScreen } from "@/components/Skeleton";
-import NewMatchForm from "./NewMatchForm";
+import MatchForm from "./MatchForm";
+import {
+  Banner,
+  EmptyState,
+  Notice,
+  PageHeader,
+  btnDanger,
+  btnOutline,
+  btnPrimary,
+  btnSecondary,
+  btnSm,
+  useNotice,
+} from "./ui";
+
+const STATUS_STYLES: Record<MatchStatus, string> = {
+  LIVE: "border-win/40 bg-win/15 text-win",
+  HT: "border-win/40 bg-win/15 text-win",
+  FT: "border-line bg-surface2 text-white",
+  UPCOMING: "border-line bg-surface2 text-white",
+};
+
+const STATUS_LABELS: Record<MatchStatus, string> = {
+  LIVE: "Live",
+  HT: "Half time",
+  FT: "Full time",
+  UPCOMING: "Upcoming",
+};
+
+const fallbackTeam = (id: string): Department => ({
+  id,
+  name: id,
+  shortName: id.slice(0, 3).toUpperCase(),
+  faculty: "",
+  campus: "main",
+  group: "A",
+  color: "#6B7280",
+});
 
 export default function AdminDashboard() {
   const confirm = useConfirm();
@@ -21,8 +59,9 @@ export default function AdminDashboard() {
   const loading = matchesQuery.isPending || departmentsQuery.isPending;
 
   const [localError, setLocalError] = useState("");
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useNotice();
   const [showNewMatch, setShowNewMatch] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const error = localError || matchesQuery.error?.message || departmentsQuery.error?.message || "";
   const setError = setLocalError;
 
@@ -32,32 +71,12 @@ export default function AdminDashboard() {
   const setMatches = (updater: (prev: Match[]) => Match[]) =>
     queryClient.setQueryData<Match[]>(queryKeys.matches, (prev) => updater(prev ?? []));
 
-  function deptName(id: string) {
-    return departments.find((d) => d.id === id)?.shortName ?? id;
+  function team(id: string) {
+    return departments.find((d) => d.id === id) ?? fallbackTeam(id);
   }
 
-  async function updateMatch(
-    m: Match,
-    patch: Partial<Pick<Match, "status" | "minute">> & { homeScore?: number; awayScore?: number }
-  ) {
-    const updated: Match = {
-      ...m,
-      status: patch.status ?? m.status,
-      minute: patch.minute ?? m.minute,
-      home: { ...m.home, score: patch.homeScore ?? m.home.score },
-      away: { ...m.away, score: patch.awayScore ?? m.away.score },
-    };
-    setMatches((prev) => prev.map((x) => (x.id === m.id ? updated : x)));
-
-    const res = await fetch("/api/admin/matches", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updated),
-    });
-    if (!res.ok) {
-      setError("Save failed — the change was not written to the database.");
-      load(); // roll the optimistic edit back to what is actually stored
-    }
+  function deptName(id: string) {
+    return team(id).shortName;
   }
 
   async function resetMatchCompletely(m: Match) {
@@ -70,7 +89,10 @@ export default function AdminDashboard() {
       body: (
         <>
           <p>The score returns to 0-0, the clock is cleared and every recorded event is removed.</p>
-          <p>The players&apos; goal and card totals are rolled back too. The fixture itself is kept.</p>
+          <p>
+            Match stats and the players&apos; goal and card totals are rolled back too. The fixture
+            itself is kept.
+          </p>
         </>
       ),
       confirmLabel: "Reset match",
@@ -87,6 +109,7 @@ export default function AdminDashboard() {
 
     const next = updated as Match;
     setMatches((prev) => prev.map((x) => (x.id === m.id ? next : x)));
+    queryClient.invalidateQueries({ queryKey: queryKeys.match(m.id) });
     setNotice("Match reset.");
   }
 
@@ -113,8 +136,6 @@ export default function AdminDashboard() {
     setNotice("Match deleted.");
   }
 
-
-
   if (loading) {
     return (
       <SkeletonScreen label="Loading matches">
@@ -123,7 +144,7 @@ export default function AdminDashboard() {
             <Skeleton className="h-6 w-32" />
             <Skeleton className="h-9 w-28 rounded-[8px]" />
           </div>
-          <div className="grid gap-2 xl:grid-cols-2">
+          <div className="grid gap-3 xl:grid-cols-2">
             {Array.from({ length: 6 }).map((_, i) => (
               <SkeletonCard key={i} />
             ))}
@@ -135,99 +156,153 @@ export default function AdminDashboard() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-5 px-4 py-5 lg:px-6 lg:py-7">
-      <h1 className="text-[18px] font-extrabold text-white lg:text-[22px]">Matches</h1>
-
-      {error && (
-        <p className="rounded-card border border-loss/40 bg-loss/10 px-3 py-2 text-[13.5px] font-medium text-white">
-          {error}
-        </p>
-      )}
-      {notice && (
-        <p className="rounded-card border border-win/40 bg-win/10 px-3 py-2 text-[13.5px] font-medium text-white">
-          {notice}
-        </p>
-      )}
-
-      <section className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="px-1 text-[13px] font-bold uppercase tracking-wide text-white">Matches</h2>
-          {!showNewMatch && (
+      <PageHeader
+        title="Matches"
+        subtitle="Run the clock, record the score and keep every fixture up to date."
+        action={
+          !showNewMatch && (
             <button
-              onClick={() => setShowNewMatch(true)}
-              className="rounded-[8px] bg-accent px-4 py-2 text-[13.5px] font-bold text-white"
+              onClick={() => {
+                setEditingId(null);
+                setShowNewMatch(true);
+              }}
+              className={btnPrimary}
             >
               + New match
             </button>
-          )}
-        </div>
+          )
+        }
+      />
 
-        {showNewMatch && (
-          <NewMatchForm
-            departments={departments}
-            onClose={() => setShowNewMatch(false)}
-            onCreated={(created) => {
-              setMatches((prev) => [...prev, created]);
-              setNotice("Match created.");
-            }}
-          />
-        )}
+      {error && <Banner tone="error">{error}</Banner>}
+      <Notice>{notice}</Notice>
 
-        {matches.length === 0 && !error && (
-          <p className="text-[14px] text-white">
-            No matches yet — use <span className="font-bold">+ New match</span> to add the first fixture.
-          </p>
-        )}
+      {showNewMatch && (
+        <MatchForm
+          departments={departments}
+          onClose={() => setShowNewMatch(false)}
+          onSaved={(created) => {
+            setMatches((prev) => [...prev, created]);
+            setNotice("Match created.");
+          }}
+        />
+      )}
 
-        <div className="grid gap-2 xl:grid-cols-2">
-          {matches.map((m) => (
-            <div key={m.id} className="rounded-card border border-line bg-surface p-3 shadow-premium">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-[14px] font-semibold text-white">
-                  {deptName(m.home.departmentId)} vs {deptName(m.away.departmentId)}
-                </span>
-                <div className="flex items-center gap-3">
-                  <Link href={`/admin/matches/${m.id}`} className="text-[12.5px] font-bold text-accent">
-                    Edit lineups &amp; events &rarr;
-                  </Link>
-                  <button
-                    onClick={() => resetMatchCompletely(m)}
-                    className="text-[12px] font-bold text-white underline decoration-line underline-offset-2"
-                  >
-                    Reset match
-                  </button>
-                  <button onClick={() => removeMatch(m)} className="text-[12px] font-bold text-loss">
-                    Delete
-                  </button>
+      {matches.length === 0 && !error && !showNewMatch && (
+        <EmptyState
+          title="No fixtures yet"
+          body="Create the first fixture and it will appear here, on the public site and in the group tables."
+          action={
+            <button onClick={() => setShowNewMatch(true)} className={btnPrimary}>
+              + New match
+            </button>
+          }
+        />
+      )}
+
+      <div className="grid gap-3 xl:grid-cols-2">
+        {matches.map((m) => {
+          const home = team(m.home.departmentId);
+          const away = team(m.away.departmentId);
+
+          if (editingId === m.id) {
+            return (
+              <div key={m.id} className="xl:col-span-2">
+                <MatchForm
+                  departments={departments}
+                  match={m}
+                  onClose={() => setEditingId(null)}
+                  onSaved={(updated) => {
+                    setMatches((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
+                    setNotice("Fixture updated.");
+                  }}
+                />
+              </div>
+            );
+          }
+
+          return (
+            <article
+              key={m.id}
+              className="flex flex-col gap-3 rounded-card border border-line bg-surface p-3.5 shadow-premium lg:p-4"
+            >
+              {/* Who, when and where — the identity of the fixture. */}
+              <header className="flex min-w-0 items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <DeptBadge department={home} size={26} />
+                    <span className="truncate text-[15px] font-bold text-white">
+                      {home.shortName}
+                    </span>
+                    <span className="text-[13px] text-white/60">v</span>
+                    <DeptBadge department={away} size={26} />
+                    <span className="truncate text-[15px] font-bold text-white">
+                      {away.shortName}
+                    </span>
+                  </div>
+                  <p className="mt-1 truncate text-[12px] text-white/70">
+                    {[m.kickoff, m.round, m.venue].filter(Boolean).join(" · ")}
+                  </p>
                 </div>
-              </div>
-              <MatchClockControls
-                match={m}
-                onChange={(updated) =>
-                  setMatches((prev) => prev.map((x) => (x.id === updated.id ? updated : x)))
-                }
-              />
 
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <span className="text-[12.5px] font-semibold text-white">Score</span>
-                <input
-                  type="number"
-                  value={m.home.score}
-                  onChange={(e) => updateMatch(m, { homeScore: Number(e.target.value) })}
-                  className="w-14 rounded-[6px] border border-line bg-surface2 px-2 py-1 text-center text-[13px] text-white"
-                />
-                <span className="text-white">-</span>
-                <input
-                  type="number"
-                  value={m.away.score}
-                  onChange={(e) => updateMatch(m, { awayScore: Number(e.target.value) })}
-                  className="w-14 rounded-[6px] border border-line bg-surface2 px-2 py-1 text-center text-[13px] text-white"
+                <span
+                  className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${
+                    STATUS_STYLES[m.status]
+                  }`}
+                >
+                  {STATUS_LABELS[m.status]}
+                </span>
+              </header>
+
+              <div className="rounded-[8px] border border-line bg-surface2/50 p-2.5">
+                <MatchClockControls
+                  match={m}
+                  onChange={(updated) => {
+                    setMatches((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
+                    queryClient.invalidateQueries({ queryKey: queryKeys.match(updated.id) });
+                  }}
                 />
               </div>
-            </div>
-          ))}
-        </div>
-      </section>
 
+              <div className="rounded-[8px] border border-line bg-surface2/50 p-2.5">
+                <ScoreControls
+                  match={m}
+                  home={home}
+                  away={away}
+                  onSaved={(updated) => {
+                    setMatches((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
+                    queryClient.invalidateQueries({ queryKey: queryKeys.match(updated.id) });
+                  }}
+                  onError={(message) => {
+                    setError(message);
+                    load();
+                  }}
+                />
+              </div>
+
+              {/* Actions, as buttons. These used to be four differently coloured
+                  bits of underlined text competing with the team names. */}
+              <footer className="flex flex-wrap gap-2 border-t border-line pt-3">
+                <Link href={`/admin/matches/${m.id}`} className={`${btnPrimary} ${btnSm}`}>
+                  Events &amp; stats
+                </Link>
+                <button onClick={() => setEditingId(m.id)} className={`${btnSecondary} ${btnSm}`}>
+                  Edit fixture
+                </button>
+                <button
+                  onClick={() => resetMatchCompletely(m)}
+                  className={`${btnOutline} ${btnSm} ml-auto`}
+                >
+                  Reset
+                </button>
+                <button onClick={() => removeMatch(m)} className={`${btnDanger} ${btnSm}`}>
+                  Delete
+                </button>
+              </footer>
+            </article>
+          );
+        })}
+      </div>
     </div>
   );
 }

@@ -6,7 +6,7 @@ import {
   useQueryClient,
   type UseQueryOptions,
 } from "@tanstack/react-query";
-import { Department, Match, Player } from "@/lib/types";
+import { Department, Match, Player, Venue } from "@/lib/types";
 
 // Every client-side read goes through here, so caching, keys and invalidation
 // live in one place rather than being re-implemented per page.
@@ -16,6 +16,7 @@ export const queryKeys = {
   players: ["players"] as const,
   matches: ["matches"] as const,
   match: (id: string) => ["matches", id] as const,
+  venues: ["venues"] as const,
   adminUsers: ["admin", "users"] as const,
 };
 
@@ -49,17 +50,43 @@ export function usePlayers(options?: Partial<UseQueryOptions<Player[], Error>>) 
   });
 }
 
+export function useVenues(options?: Partial<UseQueryOptions<Venue[], Error>>) {
+  return useQuery({
+    queryKey: queryKeys.venues,
+    queryFn: () => getJson<Venue[]>("/api/admin/venues"),
+    ...REFERENCE_DATA,
+    ...options,
+  });
+}
+
+// How often live data is re-read.
+//
+// One interval for everything was the wrong shape: 20 seconds is far too slow
+// for a match in progress — a viewer watching the stats could sit most of half
+// a minute behind whatever the admin had just typed — and far too eager for a
+// fixture list that will not change until someone kicks off. So the rate
+// follows the state of the data itself.
+const LIVE_POLL_MS = 4_000;
+const IDLE_POLL_MS = 60_000;
+
+const isLive = (m: Match) => m.status === "LIVE" || m.status === "HT";
+
 /**
  * Live data. Polls in the background so a scoreline updates without anyone
  * reloading, and `initialData` lets a server-rendered page hand over its own
  * first result instead of fetching it a second time on the client.
+ *
+ * Polling pauses while the tab is hidden (React Query's default) and a refetch
+ * fires the moment it is focused again, so a phone in a pocket is not making
+ * requests every four seconds all afternoon.
  */
 export function useMatches(options?: Partial<UseQueryOptions<Match[], Error>>) {
   return useQuery({
     queryKey: queryKeys.matches,
     queryFn: () => getJson<Match[]>("/api/matches"),
-    staleTime: 10_000,
-    refetchInterval: 20_000,
+    staleTime: 0,
+    refetchInterval: (query) =>
+      (query.state.data ?? []).some(isLive) ? LIVE_POLL_MS : IDLE_POLL_MS,
     ...options,
   });
 }
@@ -68,8 +95,11 @@ export function useMatch(id: string, options?: Partial<UseQueryOptions<Match, Er
   return useQuery({
     queryKey: queryKeys.match(id),
     queryFn: () => getJson<Match>(`/api/matches/${id}`),
-    staleTime: 10_000,
-    refetchInterval: 20_000,
+    staleTime: 0,
+    refetchInterval: (query) => {
+      const match = query.state.data;
+      return match && isLive(match) ? LIVE_POLL_MS : IDLE_POLL_MS;
+    },
     ...options,
   });
 }

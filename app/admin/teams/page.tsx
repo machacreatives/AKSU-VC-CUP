@@ -8,7 +8,7 @@ import { queryKeys, useDepartments, usePlayers } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 import { CAMPUS_GROUPS, CAMPUS_LABELS, Campus, Department, Player } from "@/lib/types";
 import { Skeleton, SkeletonPageHeader, SkeletonRows, SkeletonScreen } from "@/components/Skeleton";
-import { Banner, EmptyState, PageHeader, btnPrimary } from "../ui";
+import { Banner, EmptyState, Notice, PageHeader, btnDanger, btnPrimary, btnSm, useNotice } from "../ui";
 import TeamForm from "./TeamForm";
 
 const CAMPUSES: Campus[] = ["main", "obioakpa"];
@@ -27,7 +27,7 @@ export default function TeamsPage() {
   const queryError = teamsQuery.error?.message ?? playersQuery.error?.message ?? "";
 
   const [localError, setLocalError] = useState("");
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useNotice();
   const [creating, setCreating] = useState(false);
   const error = localError || queryError;
   const setError = setLocalError;
@@ -112,7 +112,7 @@ export default function TeamsPage() {
       />
 
       {error && <Banner tone="error">{error}</Banner>}
-      {notice && <Banner tone="success">{notice}</Banner>}
+      <Notice>{notice}</Notice>
 
       {creating && (
         <TeamForm
@@ -177,47 +177,58 @@ export default function TeamsPage() {
                   {groupTeams.length === 0 ? (
                     <p className="px-1 text-[13px] text-white">No teams in this group yet.</p>
                   ) : (
-                    <div className="grid min-w-0 gap-2 lg:grid-cols-2">
+                    <div className="grid min-w-0 gap-3 lg:grid-cols-2">
                       {groupTeams.map((team) => {
                         const size = squadSize(team.id);
                         return (
-                          <div
+                          <article
                             key={team.id}
-                            className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 rounded-card border border-line bg-surface p-3 shadow-premium"
+                            className="flex min-w-0 flex-col gap-3 rounded-card border border-line bg-surface p-3.5 shadow-premium transition-colors hover:border-white/15"
                           >
-                            <DeptBadge department={team} size={32} />
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-[14.5px] font-semibold text-white">
-                                {team.name}
-                              </p>
-                              <p className="truncate text-[12px] text-white">
-                                {team.shortName} · {team.faculty}
-                              </p>
-                            </div>
-                            {/* Count and actions drop to their own line rather
-                                than squeezing the team name off the card. */}
-                            <div className="flex w-full shrink-0 items-center gap-3 sm:w-auto">
+                            <div className="flex min-w-0 items-center gap-3">
+                              {/* The team's colour is its identity in every
+                                  table and card, so it leads here too. */}
+                              <DeptBadge department={team} size={34} />
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-[15px] font-bold text-white">
+                                  {team.name}
+                                </p>
+                                <p className="truncate text-[12px] text-white/70">
+                                  {team.shortName}
+                                  {team.faculty ? ` · ${team.faculty}` : ""}
+                                </p>
+                              </div>
                               <span
-                                className={`text-[12px] font-semibold ${
-                                  size >= 11 ? "text-white" : "text-gold"
+                                className={`shrink-0 rounded-full border px-2.5 py-1 text-[11.5px] font-bold ${
+                                  size >= 11
+                                    ? "border-line bg-surface2 text-white"
+                                    : "border-gold/40 bg-gold/10 text-gold"
                                 }`}
+                                title={
+                                  size >= 11
+                                    ? "Enough players for a starting eleven"
+                                    : "Fewer than eleven players"
+                                }
                               >
                                 {size} player{size === 1 ? "" : "s"}
                               </span>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2 border-t border-line pt-3">
                               <Link
                                 href={`/admin/teams/${team.id}`}
-                                className="ml-auto text-[12.5px] font-bold text-accent sm:ml-0"
+                                className={`${btnPrimary} ${btnSm}`}
                               >
-                                Squad &rarr;
+                                Manage squad
                               </Link>
                               <button
                                 onClick={() => removeTeam(team)}
-                                className="text-[12px] font-bold text-loss"
+                                className={`${btnDanger} ${btnSm} ml-auto`}
                               >
                                 Delete
                               </button>
                             </div>
-                          </div>
+                          </article>
                         );
                       })}
                     </div>

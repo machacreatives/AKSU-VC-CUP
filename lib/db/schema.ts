@@ -97,6 +97,86 @@ ALTER TABLE players ADD CONSTRAINT players_status_ck CHECK (status IN ('ACTIVE',
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_players_dept_number ON players (department_id, number);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_departments_short_name ON departments (LOWER(short_name));
+
+ALTER TABLE match_events ADD COLUMN IF NOT EXISTS player_id TEXT;
+ALTER TABLE match_events ADD COLUMN IF NOT EXISTS assist_player_id TEXT;
+ALTER TABLE match_events ADD COLUMN IF NOT EXISTS assist_player_name TEXT;
+
+UPDATE match_events e
+SET player_id = p.id
+FROM players p
+WHERE e.player_id IS NULL
+  AND p.department_id = e.department_id
+  AND LOWER(TRIM(p.name)) = LOWER(TRIM(e.player_name))
+  AND (SELECT COUNT(*) FROM players q
+       WHERE q.department_id = e.department_id
+         AND LOWER(TRIM(q.name)) = LOWER(TRIM(e.player_name))) = 1;
+
+ALTER TABLE match_events DROP CONSTRAINT IF EXISTS match_events_player_fk;
+ALTER TABLE match_events ADD CONSTRAINT match_events_player_fk
+  FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE SET NULL;
+
+ALTER TABLE match_events DROP CONSTRAINT IF EXISTS match_events_assist_fk;
+ALTER TABLE match_events ADD CONSTRAINT match_events_assist_fk
+  FOREIGN KEY (assist_player_id) REFERENCES players(id) ON DELETE SET NULL;
+
+ALTER TABLE match_events DROP CONSTRAINT IF EXISTS match_events_assist_only_on_goal_ck;
+ALTER TABLE match_events ADD CONSTRAINT match_events_assist_only_on_goal_ck
+  CHECK (assist_player_id IS NULL OR type = 'GOAL');
+
+ALTER TABLE match_events DROP CONSTRAINT IF EXISTS match_events_no_self_assist_ck;
+ALTER TABLE match_events ADD CONSTRAINT match_events_no_self_assist_ck
+  CHECK (assist_player_id IS NULL OR assist_player_id <> player_id);
+
+CREATE INDEX IF NOT EXISTS idx_match_events_player ON match_events(player_id);
+CREATE INDEX IF NOT EXISTS idx_match_events_assist ON match_events(assist_player_id);
+
+-- Venues. Fixtures still store the venue as text so renaming or removing a
+-- ground cannot rewrite the history of matches already played there. This
+-- table is what the fixture form offers, not a foreign key.
+CREATE TABLE IF NOT EXISTS venues (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_venues_name ON venues (LOWER(name));
+
+-- Seed the list from grounds already in use, so the dropdown is not empty on
+-- an existing database and no fixture loses its venue.
+INSERT INTO venues (id, name)
+SELECT DISTINCT
+  LOWER(REGEXP_REPLACE(BTRIM(venue), '[^a-zA-Z0-9]+', '-', 'g')),
+  BTRIM(venue)
+FROM matches
+WHERE venue IS NOT NULL AND BTRIM(venue) <> ''
+ON CONFLICT DO NOTHING;
+
+-- The scheduled instant, alongside the display text already in kickoff.
+-- Left NULL on existing rows: the old values were free text like "Sat, 3:00 PM"
+-- with no date in them, so there is nothing honest to convert them into.
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS kickoff_at TIMESTAMPTZ;
+
+-- Named substitutes per side. Only these players are offered as coming on.
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS home_bench TEXT[];
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS away_bench TEXT[];
+
+-- A substitution is one event with two players: player_id goes off,
+-- sub_in_player_id comes on.
+ALTER TABLE match_events ADD COLUMN IF NOT EXISTS sub_in_player_id TEXT;
+ALTER TABLE match_events ADD COLUMN IF NOT EXISTS sub_in_player_name TEXT;
+
+ALTER TABLE match_events DROP CONSTRAINT IF EXISTS match_events_sub_in_fk;
+ALTER TABLE match_events ADD CONSTRAINT match_events_sub_in_fk
+  FOREIGN KEY (sub_in_player_id) REFERENCES players(id) ON DELETE SET NULL;
+
+ALTER TABLE match_events DROP CONSTRAINT IF EXISTS match_events_sub_in_only_on_sub_ck;
+ALTER TABLE match_events ADD CONSTRAINT match_events_sub_in_only_on_sub_ck
+  CHECK (sub_in_player_id IS NULL OR type = 'SUB');
+
+ALTER TABLE match_events DROP CONSTRAINT IF EXISTS match_events_no_self_sub_ck;
+ALTER TABLE match_events ADD CONSTRAINT match_events_no_self_sub_ck
+  CHECK (sub_in_player_id IS NULL OR sub_in_player_id <> player_id);
 `;
 
 // Split for drivers that accept only one statement per call.
