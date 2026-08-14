@@ -4,31 +4,52 @@ import { useState } from "react";
 import Link from "next/link";
 import DeptBadge from "@/components/DeptBadge";
 import { useConfirm } from "@/components/ConfirmDialog";
-import { queryKeys, useDepartments, usePlayers } from "@/lib/api";
+import { queryKeys, useDepartments, useGroups, usePlayers } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
-import { CAMPUS_GROUPS, CAMPUS_LABELS, Campus, Department, Player } from "@/lib/types";
+import {
+  CAMPUSES,
+  CAMPUS_LABELS,
+  Campus,
+  Department,
+  Group,
+  Player,
+  groupsForCampus,
+} from "@/lib/types";
 import { Skeleton, SkeletonPageHeader, SkeletonRows, SkeletonScreen } from "@/components/Skeleton";
-import { Banner, EmptyState, Notice, PageHeader, btnDanger, btnPrimary, btnSm, useNotice } from "../ui";
+import {
+  Banner,
+  EmptyState,
+  Notice,
+  PageHeader,
+  btnDanger,
+  btnOutline,
+  btnPrimary,
+  btnSm,
+  useNotice,
+} from "../ui";
 import TeamForm from "./TeamForm";
-
-const CAMPUSES: Campus[] = ["main", "obioakpa"];
+import TeamCsvImport from "./TeamCsvImport";
 
 export default function TeamsPage() {
   const confirm = useConfirm();
   const queryClient = useQueryClient();
   const teamsQuery = useDepartments();
   const playersQuery = usePlayers();
+  const groupsQuery = useGroups();
 
   const teams: Department[] = teamsQuery.data ?? [];
   const players: Player[] = playersQuery.data ?? [];
+  const groups: Group[] = groupsQuery.data ?? [];
   // Only the very first visit has nothing cached; after that the list is
   // painted immediately and refreshed quietly in the background.
-  const loading = teamsQuery.isPending || playersQuery.isPending;
-  const queryError = teamsQuery.error?.message ?? playersQuery.error?.message ?? "";
+  const loading = teamsQuery.isPending || playersQuery.isPending || groupsQuery.isPending;
+  const queryError =
+    teamsQuery.error?.message ?? playersQuery.error?.message ?? groupsQuery.error?.message ?? "";
 
   const [localError, setLocalError] = useState("");
   const [notice, setNotice] = useNotice();
   const [creating, setCreating] = useState(false);
+  const [importing, setImporting] = useState(false);
   const error = localError || queryError;
   const setError = setLocalError;
 
@@ -95,7 +116,9 @@ export default function TeamsPage() {
     );
   }
 
-  const unassigned = teams.filter((t) => !CAMPUS_GROUPS[t.campus]?.includes(t.group));
+  const unassigned = teams.filter(
+    (t) => !groupsForCampus(groups, t.campus).some((g) => g.id === t.group)
+  );
 
   return (
     <div className="mx-auto max-w-5xl space-y-5 px-4 py-5 lg:px-6 lg:py-7">
@@ -103,10 +126,16 @@ export default function TeamsPage() {
         title="Teams"
         subtitle="Every fixture, table and squad starts from a team."
         action={
-          !creating && (
-            <button onClick={() => setCreating(true)} className={btnPrimary}>
-              + New team
-            </button>
+          !creating &&
+          !importing && (
+            <div className="flex flex-wrap gap-2">
+              <button onClick={() => setImporting(true)} className={btnOutline}>
+                Import CSV
+              </button>
+              <button onClick={() => setCreating(true)} className={btnPrimary}>
+                + New team
+              </button>
+            </div>
           )
         }
       />
@@ -125,14 +154,37 @@ export default function TeamsPage() {
         />
       )}
 
-      {teams.length === 0 && !creating && (
+      {importing && (
+        <TeamCsvImport
+          onClose={() => setImporting(false)}
+          onImported={({ created, updated, newGroups }) => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.departments });
+            // A file can bring groups with it, so that list may have moved too.
+            queryClient.invalidateQueries({ queryKey: queryKeys.groups });
+            const parts = [
+              created ? `Added ${created} team${created === 1 ? "" : "s"}` : "",
+              updated ? `updated ${updated}` : "",
+              newGroups.length ? `created Group ${newGroups.join(", ")}` : "",
+            ].filter(Boolean);
+            setNotice(`${parts.join(", ")}.`);
+            setImporting(false);
+          }}
+        />
+      )}
+
+      {teams.length === 0 && !creating && !importing && (
         <EmptyState
           title="No teams yet"
-          body="Add the departments taking part. You can then build their squads and create fixtures between them."
+          body="Add the departments taking part one at a time, or upload them all at once from a spreadsheet. You can then build their squads and create fixtures between them."
           action={
-            <button onClick={() => setCreating(true)} className={btnPrimary}>
-              + New team
-            </button>
+            <div className="flex flex-wrap justify-center gap-2">
+              <button onClick={() => setCreating(true)} className={btnPrimary}>
+                + New team
+              </button>
+              <button onClick={() => setImporting(true)} className={btnOutline}>
+                Import CSV
+              </button>
+            </div>
           }
         />
       )}
@@ -157,13 +209,13 @@ export default function TeamsPage() {
               {CAMPUS_LABELS[campus]}
             </h2>
 
-            {CAMPUS_GROUPS[campus].map((group) => {
-              const groupTeams = campusTeams.filter((t) => t.group === group);
+            {groupsForCampus(groups, campus).map((group) => {
+              const groupTeams = campusTeams.filter((t) => t.group === group.id);
               return (
-                <div key={group} className="space-y-2">
+                <div key={group.id} className="space-y-2">
                   <div className="flex items-center gap-2 px-1">
                     <h3 className="text-[12.5px] font-bold uppercase tracking-wide text-white">
-                      Group {group}
+                      Group {group.name}
                     </h3>
                     <span
                       className={`text-[11.5px] font-semibold ${

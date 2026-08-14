@@ -24,6 +24,14 @@ export default function StandingsTable({ rows, title }: { rows: StandingsRow[]; 
         <span className="text-center">GD</span>
         <span className="text-center">Pts</span>
       </div>
+      {/* A group with no teams in it yet — now possible, since groups can be
+          created before the draw. Without this the card is a header row and
+          nothing else, which reads as a table that failed to load. */}
+      {rows.length === 0 && (
+        <p className="px-3 py-5 text-center text-[13.5px] text-white/70 lg:px-4">
+          No teams in this group yet.
+        </p>
+      )}
       {rows.map((row, i) => {
         const d = getDepartment(row.departmentId);
         const gd = row.goalsFor - row.goalsAgainst;

@@ -3,12 +3,10 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
-import { queryKeys, useVenues } from "@/lib/api";
+import { queryKeys, useGroups, useVenues } from "@/lib/api";
 import { isoToKickoffInput } from "@/lib/kickoff";
-import { Department, GroupId, Match } from "@/lib/types";
+import { Department, GroupId, Match, sortGroups } from "@/lib/types";
 import { Banner, btnOutline, btnPrimary, fieldFull, label } from "./ui";
-
-const GROUPS: GroupId[] = ["A", "B", "C", "D"];
 
 /**
  * Create a fixture, or edit one that already exists.
@@ -31,12 +29,14 @@ export default function MatchForm({
   const queryClient = useQueryClient();
   const venuesQuery = useVenues();
   const venues = venuesQuery.data ?? [];
+  const { data: groupList = [] } = useGroups();
+  const groups = sortGroups(groupList);
 
   const editing = Boolean(match);
 
   const [homeId, setHomeId] = useState(match?.home.departmentId ?? "");
   const [awayId, setAwayId] = useState(match?.away.departmentId ?? "");
-  const [group, setGroup] = useState<GroupId>(match?.group ?? "A");
+  const [group, setGroup] = useState<GroupId>(match?.group ?? "");
   const [round, setRound] = useState(match?.round ?? "");
   const [venue, setVenue] = useState(match?.venue ?? "");
   const [kickoffLocal, setKickoffLocal] = useState(isoToKickoffInput(match?.kickoffAt));
@@ -63,6 +63,7 @@ export default function MatchForm({
 
     if (!homeId || !awayId) return setError("Pick both teams.");
     if (homeId === awayId) return setError("A team cannot play itself.");
+    if (!group) return setError("Pick the group.");
     if (!kickoffLocal) return setError("Pick the kickoff date and time.");
     if (!venue) return setError("Pick the venue.");
 
@@ -131,14 +132,11 @@ export default function MatchForm({
 
         <div className="space-y-1">
           <span className={label}>Group</span>
-          <select
-            value={group}
-            onChange={(e) => setGroup(e.target.value as GroupId)}
-            className={fieldFull}
-          >
-            {GROUPS.map((g) => (
-              <option key={g} value={g}>
-                Group {g}
+          <select value={group} onChange={(e) => setGroup(e.target.value)} className={fieldFull}>
+            <option value="">Select…</option>
+            {groups.map((g) => (
+              <option key={g.id} value={g.id}>
+                Group {g.name}
               </option>
             ))}
           </select>

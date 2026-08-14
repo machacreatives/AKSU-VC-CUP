@@ -28,6 +28,31 @@ function clearAttempts(ip: string) {
 }
 
 export async function POST(req: Request) {
+  try {
+    return await handleLogin(req);
+  } catch (err) {
+    // Anything thrown here used to escape as a bare 500 with no body, which is
+    // indistinguishable from a broken database. The one that actually bites is
+    // a missing ADMIN_SESSION_SECRET: every step up to signing the cookie
+    // succeeds, so a wrong password correctly returns 401 and only a *correct*
+    // password fails — which reads like the password itself being rejected.
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("admin login failed:", message);
+
+    if (message.includes("ADMIN_SESSION_SECRET")) {
+      return NextResponse.json(
+        {
+          error:
+            "The server is missing its ADMIN_SESSION_SECRET setting, so it cannot issue a login session. Set it in the hosting environment and redeploy.",
+        },
+        { status: 500 }
+      );
+    }
+    return NextResponse.json({ error: `Could not sign in: ${message}` }, { status: 500 });
+  }
+}
+
+async function handleLogin(req: Request) {
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "local";
 
   if (tooManyAttempts(ip)) {

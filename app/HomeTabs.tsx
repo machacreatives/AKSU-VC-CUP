@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useMatches, usePlayers } from "@/lib/api";
+import { useGroups, useMatches, usePlayers } from "@/lib/api";
 import { computeStandings, sortStandings } from "@/lib/standings";
 import TabBar from "@/components/TabBar";
 import MatchCard from "@/components/MatchCard";
@@ -9,14 +9,15 @@ import StandingsTable from "@/components/StandingsTable";
 import StatList from "@/components/StatList";
 import KnockoutBracket from "@/components/KnockoutBracket";
 import {
-  CAMPUS_GROUPS,
   CAMPUS_LABELS,
   Campus,
   Department,
+  Group,
   GroupId,
   Match,
   Player,
   StandingsRow,
+  groupsForCampus,
 } from "@/lib/types";
 
 type TabId = "matches" | "table" | "knockout" | "scorers" | "assists" | "ratings" | "cards";
@@ -45,17 +46,21 @@ export default function HomeTabs({
   standings: initialStandings,
   departments,
   players: initialPlayers,
+  groups: initialGroups,
 }: {
   matches: Match[];
   standings: StandingsRow[];
   departments: Department[];
   players: Player[];
+  groups: Group[];
 }) {
   // Seeded from the server render, then kept fresh in the background. Nothing
   // is re-fetched on arrival, so there is no flash of loading on a page that
   // already has its data.
   const { data: matches = initialMatches } = useMatches({ initialData: initialMatches });
   const { data: players = initialPlayers } = usePlayers({ initialData: initialPlayers });
+  // Groups change rarely, but a new one has to appear without a hard refresh.
+  const { data: groups = initialGroups } = useGroups({ initialData: initialGroups });
 
   // Recomputed from whatever matches the cache currently holds, so the table
   // moves with the scores instead of staying on the server snapshot.
@@ -68,9 +73,14 @@ export default function HomeTabs({
   const upcoming = matches.filter((m) => m.status === "UPCOMING");
   const finished = matches.filter((m) => m.status === "FT");
 
-  function rowsForGroup(group: GroupId) {
+  // Filtered on campus as well as group: a team whose campus and group
+  // disagree would otherwise show up under the wrong campus heading.
+  function rowsForGroup(group: GroupId, campus: Campus) {
     return sortStandings(
-      standings.filter((row) => departments.find((d) => d.id === row.departmentId)?.group === group)
+      standings.filter((row) => {
+        const team = departments.find((d) => d.id === row.departmentId);
+        return team?.group === group && team?.campus === campus;
+      })
     );
   }
 
@@ -157,10 +167,19 @@ export default function HomeTabs({
                   </h3>
                 )}
                 <div className="grid gap-3 lg:grid-cols-2">
-                  {CAMPUS_GROUPS[c].map((g) => (
-                    <StandingsTable key={g} rows={rowsForGroup(g)} title={`Group ${g}`} />
+                  {groupsForCampus(groups, c).map((g) => (
+                    <StandingsTable
+                      key={g.id}
+                      rows={rowsForGroup(g.id, c)}
+                      title={`Group ${g.name}`}
+                    />
                   ))}
                 </div>
+                {groupsForCampus(groups, c).length === 0 && (
+                  <p className="rounded-card border border-line bg-surface px-4 py-6 text-center text-[14px] text-white/70">
+                    No groups on this campus yet.
+                  </p>
+                )}
               </div>
             ))}
           </section>

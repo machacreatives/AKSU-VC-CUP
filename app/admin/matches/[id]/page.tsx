@@ -9,7 +9,7 @@ import { useConfirm } from "@/components/ConfirmDialog";
 import { Skeleton, SkeletonRows, SkeletonScreen } from "@/components/Skeleton";
 import { queryKeys, useDepartments, useMatch } from "@/lib/api";
 import MatchStatsControls from "./MatchStatsControls";
-import BenchControls from "./BenchControls";
+import LineupEditor from "./LineupEditor";
 import EventForm from "./EventForm";
 import ScoreControls from "../../ScoreControls";
 import { Banner, Notice, btnDanger, btnSm, useNotice } from "../../ui";
@@ -158,6 +158,10 @@ export default function AdminMatchPage() {
 
       <Notice>{notice}</Notice>
 
+      {/* Teamsheets come before the events: they are set before kick-off, and
+          they are what the substitution picker offers all match. */}
+      <LineupEditor match={match} home={homeTeam} away={awayTeam} onSaved={setNotice} />
+
       <section className="space-y-2">
         <h2 className="text-[13px] font-bold uppercase tracking-wide text-white">Add event</h2>
         <EventForm
@@ -170,8 +174,6 @@ export default function AdminMatchPage() {
           }}
         />
       </section>
-
-      <BenchControls match={match} home={homeTeam} away={awayTeam} />
 
       <MatchStatsControls match={match} home={homeTeam} away={awayTeam} />
 

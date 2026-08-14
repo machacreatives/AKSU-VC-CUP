@@ -2,6 +2,7 @@ import { sql } from "@vercel/postgres";
 import { unstable_noStore as noStore } from "next/cache";
 import {
   Department,
+  Group,
   Match,
   MatchEvent,
   Player,
@@ -44,6 +45,69 @@ export async function upsertDepartment(d: Department) {
 
 export async function deleteDepartment(id: string) {
   await sql`DELETE FROM departments WHERE id = ${id}`;
+}
+
+// ---------- Groups ----------
+
+export async function getGroups(): Promise<Group[]> {
+  freshRead();
+  const { rows } = await sql`
+    SELECT id, name, campus, sort_order AS "sortOrder"
+    FROM groups ORDER BY campus, sort_order, name
+  `;
+  return rows as Group[];
+}
+
+export async function upsertGroup(g: Group) {
+  await sql`
+    INSERT INTO groups (id, name, campus, sort_order)
+    VALUES (${g.id}, ${g.name}, ${g.campus}, ${g.sortOrder})
+    ON CONFLICT (id) DO UPDATE SET
+      name = EXCLUDED.name, campus = EXCLUDED.campus, sort_order = EXCLUDED.sort_order
+  `;
+}
+
+export async function deleteGroup(id: string) {
+  await sql`DELETE FROM groups WHERE id = ${id}`;
+}
+
+/**
+ * What still points at a group, so deleting one can explain itself.
+ *
+ * The foreign keys would refuse the delete anyway, but as an opaque 23503 the
+ * admin cannot act on.
+ */
+export async function countGroupUsage(id: string): Promise<{ teams: number; matches: number }> {
+  freshRead();
+  const { rows } = await sql`
+    SELECT
+      (SELECT COUNT(*)::int FROM departments WHERE "group" = ${id}) AS teams,
+      (SELECT COUNT(*)::int FROM matches WHERE "group" = ${id}) AS matches
+  `;
+  return { teams: rows[0].teams as number, matches: rows[0].matches as number };
+}
+
+/**
+ * Move everything in one group to another, then remove the first.
+ *
+ * Deleting a populated group is refused, so without this the only way to
+ * retire one is to move every team by hand first. Done as one transaction:
+ * a half-moved group would leave teams pointing at a group that is gone.
+ */
+export async function mergeGroupInto(fromId: string, toId: string) {
+  const client = await sql.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(`UPDATE departments SET "group" = $1 WHERE "group" = $2`, [toId, fromId]);
+    await client.query(`UPDATE matches SET "group" = $1 WHERE "group" = $2`, [toId, fromId]);
+    await client.query(`DELETE FROM groups WHERE id = $1`, [fromId]);
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 // ---------- Venues ----------
@@ -275,6 +339,41 @@ export async function upsertMatch(m: Match) {
 export async function setMatchBench(matchId: string, side: "home" | "away", playerIds: string[]) {
   const column = side === "home" ? "home_bench" : "away_bench";
   await sql.query(`UPDATE matches SET ${column} = $1 WHERE id = $2`, [playerIds, matchId]);
+}
+
+/**
+ * The whole teamsheet for one side: formation, starting XI, captain, bench.
+ *
+ * Written together because they only make sense together — an XI of eleven
+ * against a formation with ten slots puts a player nowhere, and a captain who
+ * is not in the XI wears an armband on the bench. Still scoped to one side and
+ * still nowhere near the clock or the scoreline.
+ */
+export async function setMatchLineup(
+  matchId: string,
+  side: "home" | "away",
+  lineup: {
+    formation: string;
+    startingXI: string[];
+    captainId: string | null;
+    bench: string[];
+  }
+) {
+  const prefix = side === "home" ? "home" : "away";
+  await sql.query(
+    `UPDATE matches
+     SET ${prefix}_formation = $1, ${prefix}_starting_xi = $2,
+         ${prefix}_captain_id = $3, ${prefix}_bench = $4
+     WHERE id = $5`,
+    [lineup.formation, lineup.startingXI, lineup.captainId, lineup.bench, matchId]
+  );
+}
+
+/** True when both sides have a full eleven named. Gates kickoff. */
+export function lineupsReady(match: Match): boolean {
+  return (
+    (match.home.startingXI?.length ?? 0) === 11 && (match.away.startingXI?.length ?? 0) === 11
+  );
 }
 
 // Wipe a match back to a clean slate: no score, no clock, no events.

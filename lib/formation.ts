@@ -1,12 +1,52 @@
 export type Slot = { x: number; y: number };
 
+/** Offered in the teamsheet editor. Every one of these adds up to ten outfield. */
+export const FORMATIONS = [
+  "4-4-2",
+  "4-3-3",
+  "4-2-3-1",
+  "4-1-4-1",
+  "4-5-1",
+  "3-5-2",
+  "3-4-3",
+  "5-3-2",
+  "5-4-1",
+  "4-4-1-1",
+] as const;
+
+export const DEFAULT_FORMATION = "4-4-2";
+
 /**
  * Turns "4-2-3-1" into row sizes [1, 4, 2, 3, 1] — GK row first, then
  * one row per formation block, back to front.
+ *
+ * Exported because the teamsheet editor builds one picker per slot in exactly
+ * this order: the starting XI is stored as an ordered array, and slot n of the
+ * array is slot n on the pitch. Nothing else keeps those two in step.
  */
-function rowsFromFormation(formation: string): number[] {
+export function rowsFromFormation(formation: string): number[] {
   const blocks = formation.split("-").map((n) => parseInt(n, 10)).filter((n) => !isNaN(n) && n > 0);
   return [1, ...blocks];
+}
+
+/** True when a formation names exactly ten outfield players. */
+export function isValidFormation(formation: string): boolean {
+  const rows = rowsFromFormation(formation);
+  return rows.length >= 3 && rows.reduce((sum, n) => sum + n, 0) === 11;
+}
+
+/**
+ * A label per row: goalkeeper, then defence at the back and attack at the
+ * front, with everything between called midfield.
+ */
+export function rowLabels(formation: string): string[] {
+  const rows = rowsFromFormation(formation);
+  return rows.map((_, i) => {
+    if (i === 0) return "Goalkeeper";
+    if (i === 1) return "Defence";
+    if (i === rows.length - 1) return "Attack";
+    return "Midfield";
+  });
 }
 
 /**

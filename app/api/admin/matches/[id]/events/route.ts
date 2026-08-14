@@ -97,6 +97,28 @@ export async function POST(req: Request, { params }: { params: { id: string } })
           { status: 400 }
         );
       }
+
+      // Only a named substitute can come on. Enforced here and not just in the
+      // form, so the rule survives a stale page or a direct API call.
+      const side = departmentId === match.home.departmentId ? match.home : match.away;
+      const bench = side.bench ?? [];
+      if (!bench.includes(subIn.id)) {
+        return NextResponse.json(
+          {
+            error: `${subIn.name} is not on the bench for this match. Name them under Substitutes first.`,
+          },
+          { status: 400 }
+        );
+      }
+      // Bound to a const: TypeScript drops the narrowing on a `let` once it is
+      // read inside a closure.
+      const incoming = subIn;
+      if (match.events.some((e) => e.type === "SUB" && e.subInPlayerId === incoming.id)) {
+        return NextResponse.json(
+          { error: `${incoming.name} has already come on in this match.` },
+          { status: 400 }
+        );
+      }
     }
     if (type === "SUB" && !subIn) {
       return NextResponse.json({ error: "Pick the player coming on." }, { status: 400 });

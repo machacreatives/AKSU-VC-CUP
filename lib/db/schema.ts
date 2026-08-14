@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS departments (
   short_name TEXT NOT NULL,
   faculty TEXT NOT NULL,
   campus TEXT NOT NULL CHECK (campus IN ('main','obioakpa')),
-  "group" TEXT NOT NULL CHECK ("group" IN ('A','B','C','D')),
+  "group" TEXT NOT NULL,
   color TEXT NOT NULL
 );
 
@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS matches (
   minute INTEGER,
   kickoff TEXT NOT NULL,
   round TEXT NOT NULL,
-  "group" TEXT NOT NULL CHECK ("group" IN ('A','B','C','D')),
+  "group" TEXT NOT NULL,
   venue TEXT NOT NULL,
   home_department_id TEXT NOT NULL REFERENCES departments(id),
   away_department_id TEXT NOT NULL REFERENCES departments(id),
@@ -177,6 +177,61 @@ ALTER TABLE match_events ADD CONSTRAINT match_events_sub_in_only_on_sub_ck
 ALTER TABLE match_events DROP CONSTRAINT IF EXISTS match_events_no_self_sub_ck;
 ALTER TABLE match_events ADD CONSTRAINT match_events_no_self_sub_ck
   CHECK (sub_in_player_id IS NULL OR sub_in_player_id <> player_id);
+
+-- Groups.
+--
+-- These used to be four fixed letters, written into a TypeScript union and a
+-- CHECK constraint on two tables, so adding one meant a code change and a
+-- deploy. They are rows now, and each one belongs to a campus.
+--
+-- The id is the value already stored in departments."group" and
+-- matches."group", so seeding A-D below leaves every existing row meaning
+-- exactly what it meant before, with no data migration.
+CREATE TABLE IF NOT EXISTS groups (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  campus TEXT NOT NULL CHECK (campus IN ('main','obioakpa')),
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_groups_name ON groups (LOWER(name));
+
+INSERT INTO groups (id, name, campus, sort_order) VALUES
+  ('A', 'A', 'main', 1),
+  ('B', 'B', 'main', 2),
+  ('C', 'C', 'obioakpa', 3),
+  ('D', 'D', 'obioakpa', 4)
+ON CONFLICT DO NOTHING;
+
+-- Any group that existing data refers to but the seed did not create. Without
+-- this the foreign keys below would fail on a database that already holds a
+-- value outside A-D.
+INSERT INTO groups (id, name, campus, sort_order)
+SELECT DISTINCT d."group", d."group", d.campus, 99
+FROM departments d
+WHERE d."group" IS NOT NULL
+ON CONFLICT DO NOTHING;
+
+INSERT INTO groups (id, name, campus, sort_order)
+SELECT DISTINCT m."group", m."group", 'main', 99
+FROM matches m
+WHERE m."group" IS NOT NULL
+ON CONFLICT DO NOTHING;
+
+-- The letters are no longer a closed set, so the CHECKs have to go. The
+-- foreign keys take over: a group cannot be deleted while anything points at
+-- it, and nothing can point at a group that does not exist.
+ALTER TABLE departments DROP CONSTRAINT IF EXISTS departments_group_check;
+ALTER TABLE matches DROP CONSTRAINT IF EXISTS matches_group_check;
+
+ALTER TABLE departments DROP CONSTRAINT IF EXISTS departments_group_fk;
+ALTER TABLE departments ADD CONSTRAINT departments_group_fk
+  FOREIGN KEY ("group") REFERENCES groups(id);
+
+ALTER TABLE matches DROP CONSTRAINT IF EXISTS matches_group_fk;
+ALTER TABLE matches ADD CONSTRAINT matches_group_fk
+  FOREIGN KEY ("group") REFERENCES groups(id);
 `;
 
 // Split for drivers that accept only one statement per call.

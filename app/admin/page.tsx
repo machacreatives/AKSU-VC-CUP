@@ -114,10 +114,25 @@ export default function AdminDashboard() {
   }
 
   async function removeMatch(m: Match) {
+    const isLive = m.status === "LIVE" || m.status === "HT";
+
     const ok = await confirm({
       title: `Delete ${deptName(m.home.departmentId)} vs ${deptName(m.away.departmentId)}?`,
-      body: <p>This removes the fixture entirely and cannot be undone.</p>,
-      confirmLabel: "Delete match",
+      body: (
+        <>
+          <p>This removes the fixture entirely and cannot be undone.</p>
+          {/* Deleting a match nobody is watching is housekeeping. Deleting one
+              that is on air drops it out from under every viewer, so say so. */}
+          {isLive && (
+            <p className="font-semibold text-gold">
+              This match is on air. Anyone watching it will be told it has been removed and sent
+              back to the fixture list. If you only want to clear the score and clock, use{" "}
+              <strong>Reset</strong> instead.
+            </p>
+          )}
+        </>
+      ),
+      confirmLabel: isLive ? "Delete live match" : "Delete match",
       busyLabel: "Deleting…",
       tone: "danger",
       onConfirm: async () => {
