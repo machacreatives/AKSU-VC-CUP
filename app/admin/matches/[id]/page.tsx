@@ -10,6 +10,7 @@ import { Skeleton, SkeletonRows, SkeletonScreen } from "@/components/Skeleton";
 import { queryKeys, useDepartments, useMatch } from "@/lib/api";
 import MatchStatsControls from "./MatchStatsControls";
 import LineupEditor from "./LineupEditor";
+import ManOfTheMatch from "./ManOfTheMatch";
 import EventForm from "./EventForm";
 import ScoreControls from "../../ScoreControls";
 import { Banner, Notice, btnDanger, btnSm, useNotice } from "../../ui";
@@ -47,11 +48,18 @@ export default function AdminMatchPage() {
 
   const error = localError || matchQuery.error?.message || departmentsQuery.error?.message || "";
 
-  // Adding or removing an event changes this match and the fixture list too,
-  // since the scoreline moves with it.
+  // An event touches more than this match.
+  //
+  // The scoreline moves, so the fixture list is stale — and the goal, assist or
+  // card lands on the player's totals, so every leaderboard is stale too. That
+  // last one was missing: the Stats tab kept showing the old numbers until its
+  // five-minute cache expired, which read as goals not being recorded at all.
   const load = async () => {
-    await queryClient.invalidateQueries({ queryKey: queryKeys.match(params.id) });
-    await queryClient.invalidateQueries({ queryKey: queryKeys.matches });
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.match(params.id) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.matches }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.players }),
+    ]);
   };
 
   async function removeEvent(event: MatchEvent) {
@@ -160,7 +168,13 @@ export default function AdminMatchPage() {
 
       {/* Teamsheets come before the events: they are set before kick-off, and
           they are what the substitution picker offers all match. */}
-      <LineupEditor match={match} home={homeTeam} away={awayTeam} onSaved={setNotice} />
+      <LineupEditor
+        match={match}
+        home={homeTeam}
+        away={awayTeam}
+        locked={Boolean(match.firstHalfStartedAt) || match.status !== "UPCOMING"}
+        onSaved={setNotice}
+      />
 
       <section className="space-y-2">
         <h2 className="text-[13px] font-bold uppercase tracking-wide text-white">Add event</h2>
@@ -176,6 +190,8 @@ export default function AdminMatchPage() {
       </section>
 
       <MatchStatsControls match={match} home={homeTeam} away={awayTeam} />
+
+      <ManOfTheMatch match={match} home={homeTeam} away={awayTeam} />
 
       <section className="space-y-2">
         <h2 className="text-[13px] font-bold uppercase tracking-wide text-white">

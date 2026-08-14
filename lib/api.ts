@@ -60,11 +60,18 @@ export function useDepartments(options?: Partial<UseQueryOptions<Department[], E
   });
 }
 
+/**
+ * Squads — but also every leaderboard, since goals, assists and cards are
+ * counted onto the player row. So this cannot sit on the five-minute reference
+ * cache the way teams and venues do: a goal recorded in admin has to reach Top
+ * Scorers now, not eventually.
+ */
 export function usePlayers(options?: Partial<UseQueryOptions<Player[], Error>>) {
   return useQuery({
     queryKey: queryKeys.players,
     queryFn: () => getJson<Player[]>("/api/players"),
-    ...REFERENCE_DATA,
+    staleTime: 15_000,
+    refetchInterval: 60_000,
     ...options,
   });
 }

@@ -20,7 +20,9 @@ export function computeStandings(matches: Match[], departments: Department[]): S
   }
 
   for (const m of matches) {
-    if (m.status !== "FT") continue;
+    // Only the group stage builds a group table. A quarter-final result would
+    // otherwise add points to a table the tournament has already left behind.
+    if (m.status !== "FT" || (m.stage ?? "GROUP") !== "GROUP") continue;
     const home = table.get(m.home.departmentId);
     const away = table.get(m.away.departmentId);
     if (!home || !away) continue;

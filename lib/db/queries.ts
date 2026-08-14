@@ -217,7 +217,9 @@ function rowToMatchBase(row: any): Omit<Match, "events"> {
     kickoff: row.kickoff,
     kickoffAt: row.kickoff_at ? new Date(row.kickoff_at).toISOString() : null,
     round: row.round,
-    group: row.group,
+    group: row.group ?? null,
+    stage: row.stage ?? "GROUP",
+    manOfTheMatchId: row.man_of_the_match_id ?? null,
     venue: row.venue,
     home: {
       departmentId: row.home_department_id,
@@ -241,7 +243,8 @@ function rowToMatchBase(row: any): Omit<Match, "events"> {
 }
 
 const EVENT_COLUMNS = `id, minute, type, department_id, player_id, player_name,
-           assist_player_id, assist_player_name, sub_in_player_id, sub_in_player_name, detail`;
+           assist_player_id, assist_player_name, sub_in_player_id, sub_in_player_name,
+           goal_type, detail`;
 
 function rowToEvent(e: any): MatchEvent {
   return {
@@ -255,6 +258,7 @@ function rowToEvent(e: any): MatchEvent {
     assistPlayerName: e.assist_player_name ?? undefined,
     subInPlayerId: e.sub_in_player_id ?? undefined,
     subInPlayerName: e.sub_in_player_name ?? undefined,
+    goalType: e.goal_type ?? undefined,
     detail: e.detail ?? undefined,
   };
 }
@@ -291,24 +295,25 @@ export async function upsertMatch(m: Match) {
   await sql.query(
     `
     INSERT INTO matches (
-      id, status, minute, kickoff, kickoff_at, round, "group", venue,
+      id, status, minute, kickoff, kickoff_at, round, "group", stage, venue,
       home_department_id, away_department_id, home_score, away_score,
       home_formation, away_formation, home_starting_xi, away_starting_xi,
       home_bench, away_bench,
       home_captain_id, away_captain_id, home_stats, away_stats
     ) VALUES (
-      $1, $2, $3, $4, $5, $6, $7, $8,
-      $9, $10, $11, $12,
-      $13, $14,
-      $15, $16,
-      $17, $18,
-      $19, $20,
-      $21, $22
+      $1, $2, $3, $4, $5, $6, $7, $8, $9,
+      $10, $11, $12, $13,
+      $14, $15,
+      $16, $17,
+      $18, $19,
+      $20, $21,
+      $22, $23
     )
     ON CONFLICT (id) DO UPDATE SET
       status = EXCLUDED.status, minute = EXCLUDED.minute, kickoff = EXCLUDED.kickoff,
       kickoff_at = EXCLUDED.kickoff_at,
-      round = EXCLUDED.round, "group" = EXCLUDED."group", venue = EXCLUDED.venue,
+      round = EXCLUDED.round, "group" = EXCLUDED."group", stage = EXCLUDED.stage,
+      venue = EXCLUDED.venue,
       home_department_id = EXCLUDED.home_department_id, away_department_id = EXCLUDED.away_department_id,
       home_score = EXCLUDED.home_score, away_score = EXCLUDED.away_score,
       home_formation = EXCLUDED.home_formation, away_formation = EXCLUDED.away_formation,
@@ -318,7 +323,8 @@ export async function upsertMatch(m: Match) {
       home_stats = EXCLUDED.home_stats, away_stats = EXCLUDED.away_stats
   `,
     [
-      m.id, m.status, m.minute ?? null, m.kickoff, m.kickoffAt ?? null, m.round, m.group, m.venue,
+      m.id, m.status, m.minute ?? null, m.kickoff, m.kickoffAt ?? null, m.round,
+      m.group ?? null, m.stage ?? "GROUP", m.venue,
       m.home.departmentId, m.away.departmentId, m.home.score, m.away.score,
       m.home.formation ?? null, m.away.formation ?? null,
       m.home.startingXI ?? null, m.away.startingXI ?? null,
@@ -374,6 +380,19 @@ export function lineupsReady(match: Match): boolean {
   return (
     (match.home.startingXI?.length ?? 0) === 11 && (match.away.startingXI?.length ?? 0) === 11
   );
+}
+
+/**
+ * Once the referee has blown the whistle the teamsheet is history, not a plan.
+ * Editing it mid-match would silently rewrite who was on the pitch when a goal
+ * was scored, so it locks the moment the first half starts.
+ */
+export function lineupsLocked(match: Match): boolean {
+  return Boolean(match.firstHalfStartedAt) || match.status !== "UPCOMING";
+}
+
+export async function setManOfTheMatch(matchId: string, playerId: string | null) {
+  await sql`UPDATE matches SET man_of_the_match_id = ${playerId} WHERE id = ${matchId}`;
 }
 
 // Wipe a match back to a clean slate: no score, no clock, no events.
@@ -566,14 +585,14 @@ export async function addMatchEvent(
     INSERT INTO match_events (
       match_id, minute, type, department_id,
       player_id, player_name, assist_player_id, assist_player_name,
-      sub_in_player_id, sub_in_player_name, detail
+      sub_in_player_id, sub_in_player_name, goal_type, detail
     )
     VALUES (
       ${matchId}, ${e.minute}, ${e.type}, ${e.departmentId},
       ${e.playerId ?? null}, ${e.playerName},
       ${e.assistPlayerId ?? null}, ${e.assistPlayerName ?? null},
       ${e.subInPlayerId ?? null}, ${e.subInPlayerName ?? null},
-      ${e.detail ?? null}
+      ${e.goalType ?? null}, ${e.detail ?? null}
     )
   `;
   if (syncPlayerStats) {

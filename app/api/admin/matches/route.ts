@@ -3,7 +3,7 @@ import crypto from "crypto";
 import { requireAdmin } from "@/lib/require-admin";
 import { deleteMatch, getDepartments, getGroups, getMatch, upsertMatch } from "@/lib/db/queries";
 import { formatKickoff, kickoffInputToIso } from "@/lib/kickoff";
-import { GroupId, Match, MatchStatus } from "@/lib/types";
+import { GroupId, MATCH_STAGES, Match, MatchStage, MatchStatus } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -73,17 +73,27 @@ export async function POST(req: Request) {
       }
     }
 
-    const group = (body.group ?? existing?.group) as GroupId;
-    const groups = await getGroups();
-    if (!groups.some((g) => g.id === group)) {
-      return NextResponse.json(
-        {
-          error: groups.length
-            ? `Pick a group. Available: ${groups.map((g) => g.name).join(", ")}.`
-            : "There are no groups yet. Create one under Groups first.",
-        },
-        { status: 400 }
-      );
+    const stage = (body.stage ?? existing?.stage ?? "GROUP") as MatchStage;
+    if (!MATCH_STAGES.includes(stage)) {
+      return NextResponse.json({ error: "Unknown stage." }, { status: 400 });
+    }
+
+    // A knockout tie belongs to the bracket, not a group, so the group is only
+    // required — and only kept — for a group-stage fixture.
+    let group: GroupId | null = null;
+    if (stage === "GROUP") {
+      group = (body.group ?? existing?.group ?? null) as GroupId | null;
+      const groups = await getGroups();
+      if (!groups.some((g) => g.id === group)) {
+        return NextResponse.json(
+          {
+            error: groups.length
+              ? `Pick a group. Available: ${groups.map((g) => g.name).join(", ")}.`
+              : "There are no groups yet. Create one under Groups first.",
+          },
+          { status: 400 }
+        );
+      }
     }
 
     const status = (body.status ?? existing?.status ?? "UPCOMING") as MatchStatus;
@@ -112,6 +122,8 @@ export async function POST(req: Request) {
       kickoffAt: kickoff.at,
       round: (body.round ?? existing?.round ?? "").toString().trim(),
       group,
+      stage,
+      manOfTheMatchId: existing?.manOfTheMatchId ?? null,
       venue: (body.venue ?? existing?.venue ?? "").toString().trim(),
       home: {
         ...(existing?.home ?? {}),
