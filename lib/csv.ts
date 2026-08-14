@@ -68,7 +68,7 @@ export function parseCsv(input: string): CsvRow[] {
 
 // Spreadsheet headers are typed by people, so accept the obvious variants
 // rather than failing on "No." or "Full Name".
-const HEADER_ALIASES: Record<string, string> = {
+export const PLAYER_HEADERS: Record<string, string> = {
   name: "name",
   "full name": "name",
   player: "name",
@@ -87,15 +87,46 @@ const HEADER_ALIASES: Record<string, string> = {
   status: "status",
 };
 
-export function normaliseHeader(cell: string): string | null {
-  return HEADER_ALIASES[cell.trim().toLowerCase()] ?? null;
+export const TEAM_HEADERS: Record<string, string> = {
+  name: "name",
+  team: "name",
+  "team name": "name",
+  department: "name",
+  "department name": "name",
+  short_name: "shortName",
+  "short name": "shortName",
+  short: "shortName",
+  code: "shortName",
+  abbr: "shortName",
+  abbreviation: "shortName",
+  badge: "shortName",
+  faculty: "faculty",
+  school: "faculty",
+  campus: "campus",
+  group: "group",
+  "group name": "group",
+  pool: "group",
+  color: "color",
+  colour: "color",
+  "team color": "color",
+  "team colour": "color",
+};
+
+export function normaliseHeader(
+  cell: string,
+  aliases: Record<string, string> = PLAYER_HEADERS
+): string | null {
+  return aliases[cell.trim().toLowerCase()] ?? null;
 }
 
 /** Maps a parsed CSV into objects keyed by our field names. */
-export function toRecords(rows: CsvRow[]): { line: number; record: Record<string, string> }[] {
+export function toRecords(
+  rows: CsvRow[],
+  aliases: Record<string, string> = PLAYER_HEADERS
+): { line: number; record: Record<string, string> }[] {
   if (rows.length === 0) return [];
 
-  const headers = rows[0].values.map(normaliseHeader);
+  const headers = rows[0].values.map((cell) => normaliseHeader(cell, aliases));
   return rows.slice(1).map(({ line, values }) => {
     const record: Record<string, string> = {};
     headers.forEach((key, i) => {
@@ -109,4 +140,13 @@ export const CSV_TEMPLATE = `name,number,position,squad_role,status
 Udo Effiong,9,FW,captain,active
 Emem Bassey,1,GK,player,active
 Aniekan Peter,4,DF,vice_captain,injured
+`;
+
+// Colour is optional in the template on purpose: filling sixteen hex codes by
+// hand is the sort of thing that stops a bulk import being worth doing, and a
+// blank one gets a distinct colour assigned automatically.
+export const TEAM_CSV_TEMPLATE = `name,short_name,faculty,campus,group,color
+Computer Science,CSC,Physical Sciences,main,A,#F2661F
+Law,LAW,Law,main,A,
+Accounting,ACC,Management Sciences,obioakpa,C,
 `;

@@ -6,7 +6,7 @@ import {
   useQueryClient,
   type UseQueryOptions,
 } from "@tanstack/react-query";
-import { Department, Match, Player, Venue } from "@/lib/types";
+import { Department, Group, Match, Player, Venue } from "@/lib/types";
 
 // Every client-side read goes through here, so caching, keys and invalidation
 // live in one place rather than being re-implemented per page.
@@ -16,15 +16,34 @@ export const queryKeys = {
   players: ["players"] as const,
   matches: ["matches"] as const,
   match: (id: string) => ["matches", id] as const,
+  groups: ["groups"] as const,
   venues: ["venues"] as const,
   adminUsers: ["admin", "users"] as const,
 };
+
+/**
+ * A failed request, with the status kept.
+ *
+ * "Could not read from the database" is the right message for a blip, and
+ * exactly the wrong one for a match that has been deleted — the caller needs to
+ * tell those apart to say something useful, and to stop retrying something that
+ * will never come back.
+ */
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+export const isNotFound = (error: unknown) =>
+  error instanceof ApiError && error.status === 404;
 
 async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error ?? "Could not read from the database.");
+    throw new ApiError(body.error ?? "Could not read from the database.", res.status);
   }
   return res.json();
 }
@@ -45,6 +64,15 @@ export function usePlayers(options?: Partial<UseQueryOptions<Player[], Error>>) 
   return useQuery({
     queryKey: queryKeys.players,
     queryFn: () => getJson<Player[]>("/api/players"),
+    ...REFERENCE_DATA,
+    ...options,
+  });
+}
+
+export function useGroups(options?: Partial<UseQueryOptions<Group[], Error>>) {
+  return useQuery({
+    queryKey: queryKeys.groups,
+    queryFn: () => getJson<Group[]>("/api/groups"),
     ...REFERENCE_DATA,
     ...options,
   });
@@ -97,9 +125,14 @@ export function useMatch(id: string, options?: Partial<UseQueryOptions<Match, Er
     queryFn: () => getJson<Match>(`/api/matches/${id}`),
     staleTime: 0,
     refetchInterval: (query) => {
+      // A match that has been deleted is not coming back, so stop asking for it
+      // every few seconds — a tab left open on a removed fixture would poll
+      // until it was closed.
+      if (isNotFound(query.state.error)) return false;
       const match = query.state.data;
       return match && isLive(match) ? LIVE_POLL_MS : IDLE_POLL_MS;
     },
+    retry: (failureCount, error) => !isNotFound(error) && failureCount < 1,
     ...options,
   });
 }

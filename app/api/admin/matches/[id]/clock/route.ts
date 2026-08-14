@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "@vercel/postgres";
 import { requireAdmin } from "@/lib/require-admin";
-import { getMatch } from "@/lib/db/queries";
+import { getMatch, lineupsReady } from "@/lib/db/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +30,26 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const id = params.id;
 
     switch (action) {
-      case "start-first-half":
+      case "start-first-half": {
+        // No kickoff without a teamsheet. Enforced here and not only in the
+        // dashboard, so a stale page cannot start a match that has no lineup —
+        // and once it is running the public Lineups tab has something to show.
+        const match = await getMatch(id);
+        if (!match) return NextResponse.json({ error: "Match not found." }, { status: 404 });
+
+        if (!lineupsReady(match)) {
+          const missing = [
+            (match.home.startingXI?.length ?? 0) !== 11 ? "the home side" : "",
+            (match.away.startingXI?.length ?? 0) !== 11 ? "the away side" : "",
+          ].filter(Boolean);
+          return NextResponse.json(
+            {
+              error: `Name the starting eleven for ${missing.join(" and ")} before kick-off. Set it under Teamsheets on the match page.`,
+            },
+            { status: 409 }
+          );
+        }
+
         await sql`
           UPDATE matches
           SET status = 'LIVE', first_half_started_at = now(),
@@ -38,6 +57,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
           WHERE id = ${id}
         `;
         break;
+      }
 
       case "end-first-half":
         // Keep first_half_started_at: it is the record of when the half ran,

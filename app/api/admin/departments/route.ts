@@ -1,12 +1,10 @@
 import { NextResponse } from "next/server";
 import { sql } from "@vercel/postgres";
 import { requireAdmin } from "@/lib/require-admin";
-import { deleteDepartment, getDepartments, upsertDepartment } from "@/lib/db/queries";
-import { CAMPUS_GROUPS, Campus, Department, GroupId } from "@/lib/types";
+import { deleteDepartment, getDepartments, getGroups, upsertDepartment } from "@/lib/db/queries";
+import { CAMPUSES, CAMPUS_LABELS, Campus, Department, GroupId } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
-
-const CAMPUSES: Campus[] = ["main", "obioakpa"];
 
 // Teams are called "departments" in the database and the API because that is
 // what they are — the UI says "teams" because that is what they are on a pitch.
@@ -54,12 +52,30 @@ export async function POST(req: Request) {
     if (!CAMPUSES.includes(campus)) {
       return NextResponse.json({ error: "Pick a campus." }, { status: 400 });
     }
-    if (!CAMPUS_GROUPS[campus].includes(group)) {
+    // Groups are rows now, so this is a lookup rather than a lookup table. The
+    // rule it enforces is unchanged: a team's group must belong to a team's
+    // campus, or it renders under the wrong heading on the public table.
+    const groups = await getGroups();
+    const chosen = groups.find((g) => g.id === group);
+    if (!chosen) {
       return NextResponse.json(
         {
-          error: `Group ${group ?? "?"} is not on that campus. ${
-            campus === "main" ? "Main Campus" : "Obio Akpa Campus"
-          } teams must be in Group ${CAMPUS_GROUPS[campus].join(" or ")}.`,
+          error: groups.length
+            ? "Pick a group for this team."
+            : "There are no groups yet. Create one under Groups first.",
+        },
+        { status: 400 }
+      );
+    }
+    if (chosen.campus !== campus) {
+      const available = groups
+        .filter((g) => g.campus === campus)
+        .map((g) => `Group ${g.name}`);
+      return NextResponse.json(
+        {
+          error: `Group ${chosen.name} is not on that campus. ${CAMPUS_LABELS[campus]} teams must be in ${
+            available.length ? available.join(" or ") : "a group on that campus, and there are none yet"
+          }.`,
         },
         { status: 400 }
       );

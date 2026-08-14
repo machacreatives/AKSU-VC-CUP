@@ -91,7 +91,23 @@ export async function readSessionToken(token: string | undefined): Promise<Sessi
   const [encoded, signature] = token.split(".");
   if (!encoded || !signature) return null;
 
-  const expected = await sign(encoded);
+  // Fail closed rather than throwing.
+  //
+  // This runs inside middleware on every admin request. An exception there is
+  // not a redirect to the login page — it is MIDDLEWARE_INVOCATION_FAILED, a
+  // 500 on the whole route, and it happens only once a browser is carrying a
+  // cookie. A missing ADMIN_SESSION_SECRET therefore looked fine until the
+  // moment someone had a session, and then locked the admin area entirely.
+  // Treating an unverifiable token as "not signed in" sends them to the login
+  // page, which explains the real problem.
+  let expected: string;
+  try {
+    expected = await sign(encoded);
+  } catch (err) {
+    console.error("session verification failed:", err instanceof Error ? err.message : err);
+    return null;
+  }
+
   if (!timingSafeEqual(signature, expected)) return null;
 
   const payload = decodePayload(encoded);

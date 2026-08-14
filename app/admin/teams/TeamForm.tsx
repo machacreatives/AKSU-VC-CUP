@@ -1,11 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import DeptBadge from "@/components/DeptBadge";
-import { CAMPUS_GROUPS, CAMPUS_LABELS, Campus, Department, GroupId } from "@/lib/types";
+import { CAMPUSES, CAMPUS_LABELS, Campus, Department, GroupId, groupsForCampus } from "@/lib/types";
+import { useGroups } from "@/lib/api";
 import { Banner, btnOutline, btnPrimary, field, fieldFull, label } from "../ui";
-
-const CAMPUSES: Campus[] = ["main", "obioakpa"];
 
 const DEFAULT_COLOR = "#F2661F";
 
@@ -18,22 +17,32 @@ export default function TeamForm({
   onSaved: (d: Department) => void;
   onCancel: () => void;
 }) {
+  const { data: groups = [] } = useGroups();
+
   const [name, setName] = useState(team?.name ?? "");
   const [shortName, setShortName] = useState(team?.shortName ?? "");
   const [faculty, setFaculty] = useState(team?.faculty ?? "");
   const [campus, setCampus] = useState<Campus>(team?.campus ?? "main");
-  const [group, setGroup] = useState<GroupId>(team?.group ?? "A");
+  const [group, setGroup] = useState<GroupId>(team?.group ?? "");
   const [color, setColor] = useState(team?.color ?? DEFAULT_COLOR);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  const campusGroups = groupsForCampus(groups, campus);
 
   // Groups belong to a campus, so switching campus has to move the group with
   // it — otherwise a Main Campus team could sit in Group C and would render
   // under the wrong campus on the public table.
   function chooseCampus(next: Campus) {
     setCampus(next);
-    if (!CAMPUS_GROUPS[next].includes(group)) setGroup(CAMPUS_GROUPS[next][0]);
+    const available = groupsForCampus(groups, next);
+    if (!available.some((g) => g.id === group)) setGroup(available[0]?.id ?? "");
   }
+
+  // A new team lands in the first group of its campus once the list arrives.
+  useEffect(() => {
+    if (!group && campusGroups.length > 0) setGroup(campusGroups[0].id);
+  }, [group, campusGroups]);
 
   const preview: Department = {
     id: team?.id ?? "preview",
@@ -106,15 +115,18 @@ export default function TeamForm({
 
         <div className="space-y-1">
           <span className={label}>Group</span>
-          <select className={fieldFull} value={group} onChange={(e) => setGroup(e.target.value as GroupId)}>
-            {CAMPUS_GROUPS[campus].map((g) => (
-              <option key={g} value={g}>
-                Group {g}
+          <select className={fieldFull} value={group} onChange={(e) => setGroup(e.target.value)}>
+            {campusGroups.length === 0 && <option value="">No groups on this campus</option>}
+            {campusGroups.map((g) => (
+              <option key={g.id} value={g.id}>
+                Group {g.name}
               </option>
             ))}
           </select>
-          <p className="text-[11.5px] text-white">
-            {CAMPUS_LABELS[campus]} uses {CAMPUS_GROUPS[campus].map((g) => `Group ${g}`).join(" and ")}.
+          <p className="text-[11.5px] text-white/70">
+            {campusGroups.length === 0
+              ? `${CAMPUS_LABELS[campus]} has no groups yet — create one under Groups.`
+              : `${CAMPUS_LABELS[campus]} uses ${campusGroups.map((g) => `Group ${g.name}`).join(", ")}.`}
           </p>
         </div>
 

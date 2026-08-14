@@ -3,8 +3,9 @@
 import DeptBadge from "@/components/DeptBadge";
 import MatchClock from "@/components/MatchClock";
 import MatchDetailTabs from "@/components/MatchDetailTabs";
+import MatchGone from "@/components/MatchGone";
 import ScorersLine from "@/components/ScorersLine";
-import { useMatch } from "@/lib/api";
+import { isNotFound, useMatch } from "@/lib/api";
 import { Department, Match } from "@/lib/types";
 
 const unknownDepartment = (id: string): Department => ({
@@ -33,7 +34,15 @@ export default function MatchLive({
   initialMatch: Match;
   departments: Department[];
 }) {
-  const { data: match = initialMatch } = useMatch(initialMatch.id, { initialData: initialMatch });
+  const { data: match = initialMatch, error } = useMatch(initialMatch.id, {
+    initialData: initialMatch,
+  });
+
+  // The fixture was deleted while this page was open. Without this the poll
+  // just fails and React Query keeps serving the last good copy, so the score
+  // silently freezes and the clock ticks on against a match that no longer
+  // exists — the viewer has no way to tell that from a quiet passage of play.
+  if (isNotFound(error)) return <MatchGone reason="removed" />;
 
   const byId = new Map(departments.map((d) => [d.id, d]));
   const home = byId.get(match.home.departmentId) ?? unknownDepartment(match.home.departmentId);

@@ -61,16 +61,33 @@ export default function EventForm({
   const assistCandidates = squad.filter((p) => p.id !== playerId);
   const teamHasNoSquad = squad.length === 0;
 
-  // Who can come on: the named bench for this side, if there is one. Without a
-  // teamsheet the whole squad is offered rather than blocking a substitution
-  // that plainly happened.
+  // Who can come on: the named bench for this side, and nobody else.
+  //
+  // This used to fall back to the whole squad when no bench had been named,
+  // which defeated the point — the eleven who started are already on the pitch,
+  // and offering them made it easy to record a player replacing themselves.
+  // With no bench named there is nothing to pick, and the form says so.
   const side = deptId === match.home.departmentId ? match.home : match.away;
   const namedBench = (side.bench ?? [])
     .map((id) => squad.find((p) => p.id === id))
     .filter((p): p is Player => Boolean(p));
-  const subInCandidates = (namedBench.length > 0 ? namedBench : squad).filter(
-    (p) => p.id !== playerId
+  const benchIds = new Set(namedBench.map((p) => p.id));
+
+  // Someone already brought on is on the pitch, not available to come on again.
+  const cameOnAlready = new Set(
+    match.events.filter((e) => e.type === "SUB" && e.subInPlayerId).map((e) => e.subInPlayerId!)
   );
+
+  const subInCandidates = namedBench.filter(
+    (p) => p.id !== playerId && !cameOnAlready.has(p.id)
+  );
+
+  // A substitute who has already come on can be taken off again later, so the
+  // "going off" list is the squad minus whoever is still sitting on the bench.
+  const onPitch =
+    type === "SUB"
+      ? squad.filter((p) => !benchIds.has(p.id) || cameOnAlready.has(p.id))
+      : squad;
 
   // Changing team invalidates whoever was picked from the previous one.
   function chooseTeam(id: string) {
@@ -198,7 +215,7 @@ export default function EventForm({
             disabled={teamHasNoSquad}
           >
             <option value="">Select player…</option>
-            {squad.map((p) => (
+            {onPitch.map((p) => (
               <option key={p.id} value={p.id}>
                 #{p.number} {p.name} ({p.position})
               </option>
@@ -241,9 +258,11 @@ export default function EventForm({
               value={subInId}
               onChange={(e) => setSubInId(e.target.value)}
               className={`${field} w-full`}
-              disabled={teamHasNoSquad}
+              disabled={teamHasNoSquad || namedBench.length === 0}
             >
-              <option value="">Select player…</option>
+              <option value="">
+                {namedBench.length === 0 ? "No substitutes named" : "Select player…"}
+              </option>
               {subInCandidates.map((p) => (
                 <option key={p.id} value={p.id}>
                   #{p.number} {p.name} ({p.position})
@@ -251,9 +270,11 @@ export default function EventForm({
               ))}
             </select>
             <span className="block text-[11px] text-white/70">
-              {namedBench.length > 0
-                ? `From the named bench (${namedBench.length})`
-                : "No bench named — showing the full squad"}
+              {namedBench.length === 0
+                ? "Name the bench below first"
+                : subInCandidates.length === 0
+                ? "Everyone named has already come on"
+                : `${subInCandidates.length} available on the bench`}
             </span>
           </label>
         )}
@@ -279,6 +300,16 @@ export default function EventForm({
         <Banner tone="info">
           {teamName(deptId).name} has no players yet, so there is nobody to record this against. Add
           the squad first.
+        </Banner>
+      )}
+      {type === "SUB" && !teamHasNoSquad && namedBench.length === 0 && (
+        <Banner tone="info">
+          {teamName(deptId).name} has no substitutes named for this match, so there is nobody to
+          bring on. Use{" "}
+          <a href="#substitutes" className="font-bold text-accent">
+            Substitutes
+          </a>{" "}
+          above to pick who is on the bench — then they appear here.
         </Banner>
       )}
       {error && <Banner tone="error">{error}</Banner>}

@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { requireAdmin } from "@/lib/require-admin";
-import { deleteMatch, getDepartments, getMatch, upsertMatch } from "@/lib/db/queries";
+import { deleteMatch, getDepartments, getGroups, getMatch, upsertMatch } from "@/lib/db/queries";
 import { formatKickoff, kickoffInputToIso } from "@/lib/kickoff";
 import { GroupId, Match, MatchStatus } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-const GROUPS: GroupId[] = ["A", "B", "C", "D"];
 const STATUSES: MatchStatus[] = ["UPCOMING", "LIVE", "HT", "FT"];
 
 /**
@@ -75,8 +74,16 @@ export async function POST(req: Request) {
     }
 
     const group = (body.group ?? existing?.group) as GroupId;
-    if (!GROUPS.includes(group)) {
-      return NextResponse.json({ error: "Group must be A, B, C or D." }, { status: 400 });
+    const groups = await getGroups();
+    if (!groups.some((g) => g.id === group)) {
+      return NextResponse.json(
+        {
+          error: groups.length
+            ? `Pick a group. Available: ${groups.map((g) => g.name).join(", ")}.`
+            : "There are no groups yet. Create one under Groups first.",
+        },
+        { status: 400 }
+      );
     }
 
     const status = (body.status ?? existing?.status ?? "UPCOMING") as MatchStatus;

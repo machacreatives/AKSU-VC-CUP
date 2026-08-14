@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Match } from "@/lib/types";
 import { clockPhase, computeClock, REGULATION } from "@/lib/match-clock";
 import { useConfirm } from "@/components/ConfirmDialog";
@@ -66,6 +67,15 @@ export default function MatchClockControls({
   const addedForCurrentHalf =
     phase === "second-half" ? match.secondHalfAddedMinutes : match.firstHalfAddedMinutes;
 
+  // The server refuses to start a match with no teamsheet. Mirroring the rule
+  // here means the button says why up front, instead of looking broken and
+  // then explaining after the click.
+  const missingLineups = [
+    (match.home.startingXI?.length ?? 0) !== 11 ? "home" : "",
+    (match.away.startingXI?.length ?? 0) !== 11 ? "away" : "",
+  ].filter(Boolean);
+  const canKickOff = missingLineups.length === 0;
+
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
@@ -80,9 +90,24 @@ export default function MatchClockControls({
         </span>
 
         {phase === "not-started" && (
-          <button className={primary} disabled={busy} onClick={() => send("start-first-half")}>
-            Kick off
-          </button>
+          <>
+            <button
+              className={canKickOff ? primary : `${outline} cursor-not-allowed`}
+              disabled={busy || !canKickOff}
+              onClick={() => send("start-first-half")}
+              title={canKickOff ? undefined : "Name both starting elevens first"}
+            >
+              Kick off
+            </button>
+            {!canKickOff && (
+              <Link
+                href={`/admin/matches/${match.id}#teamsheets`}
+                className="text-[12.5px] font-bold text-gold underline decoration-gold/40 underline-offset-2"
+              >
+                Name the {missingLineups.join(" and ")} XI
+              </Link>
+            )}
+          </>
         )}
 
         {phase === "first-half" && (

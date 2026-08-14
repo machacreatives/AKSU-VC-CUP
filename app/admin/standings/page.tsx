@@ -5,12 +5,17 @@ import Link from "next/link";
 import StandingsTable from "@/components/StandingsTable";
 import { DataProvider } from "@/lib/data-context";
 import { Skeleton, SkeletonPageHeader, SkeletonScreen } from "@/components/Skeleton";
-import { useDepartments, useMatches } from "@/lib/api";
+import { useDepartments, useGroups, useMatches } from "@/lib/api";
 import { computeStandings, sortStandings } from "@/lib/standings";
-import { CAMPUS_GROUPS, CAMPUS_LABELS, Campus, Department, Match } from "@/lib/types";
+import {
+  CAMPUSES,
+  CAMPUS_LABELS,
+  Department,
+  Group,
+  Match,
+  groupsForCampus,
+} from "@/lib/types";
 import { Banner, EmptyState, PageHeader } from "../ui";
-
-const CAMPUSES: Campus[] = ["main", "obioakpa"];
 
 /**
  * The group tables, exactly as the public site computes them.
@@ -23,10 +28,12 @@ const CAMPUSES: Campus[] = ["main", "obioakpa"];
 export default function AdminStandingsPage() {
   const matchesQuery = useMatches();
   const teamsQuery = useDepartments();
+  const groupsQuery = useGroups();
 
   const matches = useMemo<Match[]>(() => matchesQuery.data ?? [], [matchesQuery.data]);
   const departments = useMemo<Department[]>(() => teamsQuery.data ?? [], [teamsQuery.data]);
-  const loading = matchesQuery.isPending || teamsQuery.isPending;
+  const groups = useMemo<Group[]>(() => groupsQuery.data ?? [], [groupsQuery.data]);
+  const loading = matchesQuery.isPending || teamsQuery.isPending || groupsQuery.isPending;
   const error = matchesQuery.error?.message || teamsQuery.error?.message || "";
 
   const standings = useMemo(
@@ -90,28 +97,28 @@ export default function AdminStandingsPage() {
                   {CAMPUS_LABELS[campus]}
                 </h2>
                 <div className="grid gap-3 lg:grid-cols-2">
-                  {CAMPUS_GROUPS[campus].map((group) => {
+                  {groupsForCampus(groups, campus).map((group) => {
                     // Filter on campus as well as group: a team sitting in a
                     // group that belongs to the other campus would otherwise
                     // appear under both headings.
                     const rows = sortStandings(
                       standings.filter((row) => {
                         const team = departments.find((d) => d.id === row.departmentId);
-                        return team?.group === group && team?.campus === campus;
+                        return team?.group === group.id && team?.campus === campus;
                       })
                     );
 
                     return (
-                      <div key={group} className="min-w-0 space-y-1">
+                      <div key={group.id} className="min-w-0 space-y-1">
                         {rows.length === 0 ? (
                           <div className="rounded-card border border-line bg-surface px-3 py-6 text-center">
                             <p className="text-[13px] font-bold uppercase tracking-wide text-accent">
-                              Group {group}
+                              Group {group.name}
                             </p>
                             <p className="mt-1 text-[13px] text-white/70">No teams assigned.</p>
                           </div>
                         ) : (
-                          <StandingsTable rows={rows} title={`Group ${group}`} />
+                          <StandingsTable rows={rows} title={`Group ${group.name}`} />
                         )}
                       </div>
                     );

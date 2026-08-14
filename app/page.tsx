@@ -1,4 +1,10 @@
-import { computeStandings, getDepartments, getMatches, getPlayers } from "@/lib/db/queries";
+import {
+  computeStandings,
+  getDepartments,
+  getGroups,
+  getMatches,
+  getPlayers,
+} from "@/lib/db/queries";
 import { DataProvider } from "@/lib/data-context";
 import DbErrorNotice from "@/components/DbErrorNotice";
 import HomeTabs from "./HomeTabs";
@@ -9,12 +15,19 @@ export const dynamic = "force-dynamic";
 export default async function Home() {
   let data;
   try {
-    const [departments, matches, players] = await Promise.all([
+    const [departments, matches, players, groups] = await Promise.all([
       getDepartments(),
       getMatches(),
       getPlayers(),
+      getGroups(),
     ]);
-    data = { departments, matches, players, standings: computeStandings(matches, departments) };
+    data = {
+      departments,
+      matches,
+      players,
+      groups,
+      standings: computeStandings(matches, departments),
+    };
   } catch (err) {
     return <DbErrorNotice message={err instanceof Error ? err.message : String(err)} />;
   }
@@ -26,6 +39,7 @@ export default async function Home() {
         standings={data.standings}
         departments={data.departments}
         players={data.players}
+        groups={data.groups}
       />
     </DataProvider>
   );

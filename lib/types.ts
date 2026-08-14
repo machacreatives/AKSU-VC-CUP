@@ -1,27 +1,62 @@
 export type Campus = "main" | "obioakpa";
 
-export type GroupId = "A" | "B" | "C" | "D";
-
-// Which groups belong to which campus is fixed by the tournament format. This
-// used to be duplicated inside app/HomeTabs.tsx, where the Table tab filtered
-// by group alone — so a team whose campus and group disagreed rendered under
-// the wrong campus. One definition, used by the UI and the API validation.
-export const CAMPUS_GROUPS: Record<Campus, GroupId[]> = {
-  main: ["A", "B"],
-  obioakpa: ["C", "D"],
-};
-
-export const GROUP_CAMPUS: Record<GroupId, Campus> = {
-  A: "main",
-  B: "main",
-  C: "obioakpa",
-  D: "obioakpa",
-};
+export const CAMPUSES: Campus[] = ["main", "obioakpa"];
 
 export const CAMPUS_LABELS: Record<Campus, string> = {
   main: "Main Campus",
   obioakpa: "Obio Akpa Campus",
 };
+
+/**
+ * The id stored on a team or a fixture. Just a string now.
+ *
+ * This was a union of "A" | "B" | "C" | "D", which meant the tournament format
+ * was a compile-time fact: adding a group was a code change, a deploy, and two
+ * database constraints. Groups are rows in the `groups` table now, so the type
+ * cannot enumerate them and every list of groups comes from the data.
+ */
+export type GroupId = string;
+
+export type Group = {
+  id: string;
+  /** What the admin typed — usually a letter. Rendered as "Group {name}". */
+  name: string;
+  campus: Campus;
+  /** Display order within a campus. Ties fall back to name. */
+  sortOrder: number;
+};
+
+/**
+ * Groups on one campus, in display order.
+ *
+ * Replaces the old CAMPUS_GROUPS constant. Every caller now passes the list it
+ * already loaded, which also removes the old trap where the public table
+ * filtered by group alone and a team whose campus and group disagreed rendered
+ * under the wrong heading.
+ */
+export function groupsForCampus(groups: Group[], campus: Campus): Group[] {
+  return groups
+    .filter((g) => g.campus === campus)
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+}
+
+export function sortGroups(groups: Group[]): Group[] {
+  return [...groups].sort(
+    (a, b) =>
+      CAMPUSES.indexOf(a.campus) - CAMPUSES.indexOf(b.campus) ||
+      a.sortOrder - b.sortOrder ||
+      a.name.localeCompare(b.name)
+  );
+}
+
+export function findGroup(groups: Group[], id: string | null | undefined): Group | undefined {
+  return groups.find((g) => g.id === id);
+}
+
+/** "Group A". Kept in one place so the word "Group" is never hand-typed. */
+export function groupLabel(group: Group | undefined, fallbackId?: string): string {
+  return `Group ${group?.name ?? fallbackId ?? "?"}`;
+}
 
 export type Department = {
   id: string;
