@@ -36,7 +36,9 @@ export default function AdminStatsPage() {
     const byAssists = [...players].filter((p) => p.assists > 0).sort((a, b) => b.assists - a.assists);
     const byRating = [...players]
       .filter((p) => (p.rating ?? 0) > 0)
-      .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
+      .sort(
+        (a, b) => (b.rating ?? 0) - (a.rating ?? 0) || (b.appearances ?? 0) - (a.appearances ?? 0)
+      );
     const byCards = [...players]
       .map((p) => ({ ...p, cardScore: p.redCards * 3 + p.yellowCards }))
       .filter((p) => p.cardScore > 0)

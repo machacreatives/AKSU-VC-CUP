@@ -114,7 +114,17 @@ export type Player = PlayerProfile & {
   assists: number;
   yellowCards: number;
   redCards: number;
+  /**
+   * Season rating — the mean of this player's match ratings across finished
+   * fixtures. Computed by lib/ratings.ts, never stored: it used to be a
+   * database column that nothing wrote, so it was always empty.
+   *
+   * Undefined means "has not finished a match yet", which is why the
+   * leaderboards filter on it rather than showing a table of 6.0s.
+   */
   rating?: number;
+  /** Finished matches the rating averages over. Breaks ties on the leaderboard. */
+  appearances?: number;
 };
 
 export type MatchEventType = "GOAL" | "YELLOW" | "RED" | "SUB";

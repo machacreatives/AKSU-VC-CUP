@@ -261,6 +261,12 @@ ALTER TABLE matches ADD CONSTRAINT matches_stage_ck
 -- A knockout tie belongs to no group, so the column has to allow it. The
 -- foreign key still holds for every row that names one.
 ALTER TABLE matches ALTER COLUMN "group" DROP NOT NULL;
+
+-- Ratings are computed from match events now (lib/ratings.ts), so a stored
+-- column is a second source of truth that can only drift. Nothing ever wrote
+-- this one -- it was NULL for every row and every leaderboard that read it was
+-- silently empty.
+ALTER TABLE players DROP COLUMN IF EXISTS rating;
 `;
 
 // Split for drivers that accept only one statement per call.

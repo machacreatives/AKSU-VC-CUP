@@ -1,9 +1,10 @@
 "use client";
 
 import { Department, Match } from "@/lib/types";
-import { usePlayerLookup } from "@/lib/data-context";
+import { usePlayerLookup, usePlayers } from "@/lib/data-context";
 import { layoutFormation } from "@/lib/formation";
 import { MARKS, PlayerMarks, buildPlayerMarks, marksFor } from "@/lib/player-marks";
+import { MatchRating, computeMatchRatings, effectiveManOfTheMatch } from "@/lib/ratings";
 import RatingPill from "./RatingPill";
 
 /** The emoji badges for one player, rendered small enough to sit on a marker. */
@@ -46,6 +47,7 @@ function TeamLayer({
   color,
   captainId,
   marks,
+  ratings,
   manOfTheMatchId,
 }: {
   playerIds: string[];
@@ -54,6 +56,7 @@ function TeamLayer({
   color: string;
   captainId?: string;
   marks: Map<string, PlayerMarks>;
+  ratings: Map<string, MatchRating>;
   manOfTheMatchId?: string | null;
 }) {
   const findPlayer = usePlayerLookup();
@@ -72,9 +75,11 @@ function TeamLayer({
             style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
           >
             <div className="relative">
-              {player.rating !== undefined && player.rating > 0 && (
+              {/* This match's rating, not the season average — the board is a
+                  record of one afternoon. */}
+              {ratings.get(id) && (
                 <div className="absolute -left-2 -top-2 z-10">
-                  <RatingPill rating={player.rating} />
+                  <RatingPill rating={ratings.get(id)!.rating} />
                 </div>
               )}
               {captainId === id && (
@@ -120,6 +125,7 @@ function TeamSheet({
   formation,
   captainId,
   marks,
+  ratings,
   manOfTheMatchId,
   mirror = false,
 }: {
@@ -129,6 +135,7 @@ function TeamSheet({
   formation: string;
   captainId?: string;
   marks: Map<string, PlayerMarks>;
+  ratings: Map<string, MatchRating>;
   manOfTheMatchId?: string | null;
   /** Flip to face the pitch — only once the sheets sit either side of it. */
   mirror?: boolean;
@@ -162,6 +169,11 @@ function TeamSheet({
           isManOfTheMatch={manOfTheMatchId === id}
           className="shrink-0 text-[11px]"
         />
+        {ratings.get(id) && (
+          <span className="shrink-0">
+            <RatingPill rating={ratings.get(id)!.rating} />
+          </span>
+        )}
       </li>
     );
   };
@@ -216,7 +228,11 @@ export default function FormationPitch({
   awayCaptainId?: string;
 }) {
   const marks = buildPlayerMarks(match);
-  const motm = match.manOfTheMatchId;
+  const allPlayers = usePlayers();
+  const ratings = computeMatchRatings(match, allPlayers);
+  // A hat-trick takes the award regardless of who the admin named, so the star
+  // has to follow the same rule the rating does.
+  const motm = effectiveManOfTheMatch(match);
 
   const homeSheet = (
     <TeamSheet
@@ -226,6 +242,7 @@ export default function FormationPitch({
       formation={homeFormation}
       captainId={homeCaptainId}
       marks={marks}
+      ratings={ratings}
       manOfTheMatchId={motm}
     />
   );
@@ -237,6 +254,7 @@ export default function FormationPitch({
       formation={awayFormation}
       captainId={awayCaptainId}
       marks={marks}
+      ratings={ratings}
       manOfTheMatchId={motm}
       mirror
     />
@@ -285,6 +303,7 @@ export default function FormationPitch({
                 color={home.color}
                 captainId={homeCaptainId}
                 marks={marks}
+                ratings={ratings}
                 manOfTheMatchId={motm}
               />
               <TeamLayer
@@ -294,6 +313,7 @@ export default function FormationPitch({
                 color={away.color}
                 captainId={awayCaptainId}
                 marks={marks}
+                ratings={ratings}
                 manOfTheMatchId={motm}
               />
             </div>

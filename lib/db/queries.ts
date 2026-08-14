@@ -12,6 +12,7 @@ import {
   Venue,
 } from "@/lib/types";
 import { computeStandings } from "@/lib/standings";
+import { withSeasonRatings } from "@/lib/ratings";
 
 // @vercel/postgres talks to Neon over HTTP, and Next.js patches global fetch
 // with its Data Cache — so query responses were being cached to disk under
@@ -149,16 +150,24 @@ export async function getPlayers(): Promise<Player[]> {
   const { rows } = await sql`
     SELECT id, name, number, position, department_id AS "departmentId",
            squad_role AS "squadRole", status,
-           rating, goals, assists, yellow_cards AS "yellowCards", red_cards AS "redCards"
+           goals, assists, yellow_cards AS "yellowCards", red_cards AS "redCards"
     FROM players ORDER BY department_id, number
   `;
-  // pg returns NUMERIC as a string to preserve precision, so `rating` arrives
-  // as "7.8" and anything calling .toFixed() on it blows up. INTEGER columns
-  // already come back as numbers.
-  return rows.map((row: any) => ({
-    ...row,
-    rating: row.rating === null || row.rating === undefined ? undefined : Number(row.rating),
-  })) as Player[];
+  return rows as Player[];
+}
+
+/**
+ * Squads with their season rating attached.
+ *
+ * Ratings are computed from matches (see lib/ratings.ts), not stored, so every
+ * caller that serves players to the UI needs the fixture list too. This exists
+ * as one function rather than three call sites because forgetting it does not
+ * fail loudly — it just empties the Best Rated leaderboard, which is exactly
+ * how the old `players.rating` column went unnoticed for so long.
+ */
+export async function getPlayersWithRatings(): Promise<Player[]> {
+  const [players, matches] = await Promise.all([getPlayers(), getMatches()]);
+  return withSeasonRatings(players, matches);
 }
 
 /**

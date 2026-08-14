@@ -86,7 +86,11 @@ export default function HomeTabs({
 
   const topScorers = [...players].filter((p) => p.goals > 0).sort((a, b) => b.goals - a.goals);
   const topAssisters = [...players].filter((p) => p.assists > 0).sort((a, b) => b.assists - a.assists);
-  const topRated = [...players].filter((p) => (p.rating ?? 0) > 0).sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
+  // Ties break on appearances: one 10.0 from a single match should not
+  // outrank a season of 8s.
+  const topRated = [...players]
+    .filter((p) => (p.rating ?? 0) > 0)
+    .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0) || (b.appearances ?? 0) - (a.appearances ?? 0));
   const mostCarded = [...players]
     .map((p) => ({ ...p, cardScore: p.redCards * 3 + p.yellowCards }))
     .filter((p) => p.cardScore > 0)

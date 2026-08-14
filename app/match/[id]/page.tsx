@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getDepartments, getMatch, getPlayers } from "@/lib/db/queries";
+import { getDepartments, getMatch, getPlayersWithRatings } from "@/lib/db/queries";
 import { DataProvider } from "@/lib/data-context";
 import DbErrorNotice from "@/components/DbErrorNotice";
 import MatchLive from "./MatchLive";
@@ -12,7 +12,7 @@ export default async function MatchPage({ params }: { params: { id: string } }) 
     [match, departments, players] = await Promise.all([
       getMatch(params.id),
       getDepartments(),
-      getPlayers(),
+      getPlayersWithRatings(),
     ]);
   } catch (err) {
     return <DbErrorNotice message={err instanceof Error ? err.message : String(err)} />;
