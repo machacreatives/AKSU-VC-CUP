@@ -6,6 +6,7 @@ import { useConfirm } from "@/components/ConfirmDialog";
 import { api, queryKeys, useDepartments, useMe } from "@/lib/api";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ADMIN_ROLES, AdminRole, ROLE_LABELS } from "@/lib/types";
+import PasswordInput from "@/components/PasswordInput";
 import {
   Banner,
   Notice,
@@ -229,9 +230,8 @@ export default function AccountSection() {
           onChange={(e) => setDisplayName(e.target.value)}
           autoComplete="off"
         />
-        <input
+        <PasswordInput
           className={fieldFull}
-          type="password"
           placeholder={`Password (min ${MIN_PASSWORD_LENGTH} characters)`}
           value={newUserPassword}
           onChange={(e) => setNewUserPassword(e.target.value)}

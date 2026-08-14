@@ -25,6 +25,7 @@ export default function TeamForm({
   const [campus, setCampus] = useState<Campus>(team?.campus ?? "main");
   const [group, setGroup] = useState<GroupId>(team?.group ?? "");
   const [color, setColor] = useState(team?.color ?? DEFAULT_COLOR);
+  const [coach, setCoach] = useState(team?.coach ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -52,6 +53,7 @@ export default function TeamForm({
     campus,
     group,
     color: /^#[0-9a-f]{6}$/i.test(color) ? color : DEFAULT_COLOR,
+    coach,
   };
 
   async function submit(e: React.FormEvent) {
@@ -61,7 +63,7 @@ export default function TeamForm({
     const res = await fetch("/api/admin/departments", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: team?.id, name, shortName, faculty, campus, group, color }),
+      body: JSON.stringify({ id: team?.id, name, shortName, faculty, campus, group, color, coach }),
     });
     const body = await res.json().catch(() => ({}));
     setSaving(false);
@@ -100,6 +102,17 @@ export default function TeamForm({
         <div className="space-y-1">
           <span className={label}>Faculty</span>
           <input className={fieldFull} placeholder="Physical Sciences" value={faculty} onChange={(e) => setFaculty(e.target.value)} />
+        </div>
+
+        <div className="space-y-1">
+          <span className={label}>Coach</span>
+          <input
+            className={fieldFull}
+            placeholder="Optional"
+            maxLength={80}
+            value={coach}
+            onChange={(e) => setCoach(e.target.value)}
+          />
         </div>
 
         <div className="space-y-1">

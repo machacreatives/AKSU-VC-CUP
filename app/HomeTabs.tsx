@@ -62,10 +62,7 @@ export default function HomeTabs({
   // Groups change rarely, but a new one has to appear without a hard refresh.
   const { data: groups = initialGroups } = useGroups({ initialData: initialGroups });
 
-  // Recomputed from whatever matches the cache currently holds, so the table
-  // moves with the scores instead of staying on the server snapshot.
-  const standings =
-    matches === initialMatches ? initialStandings : computeStandings(matches, departments);
+
   const [tab, setTab] = useState<TabId>("matches");
   const [campus, setCampus] = useState<CampusFilter>("all");
 
@@ -73,15 +70,13 @@ export default function HomeTabs({
   const upcoming = matches.filter((m) => m.status === "UPCOMING");
   const finished = matches.filter((m) => m.status === "FT");
 
-  // Filtered on campus as well as group: a team whose campus and group
-  // disagree would otherwise show up under the wrong campus heading.
+  // Each group's table is built from the matches played *in that group*, not
+  // by filtering one global table — a team moved between groups used to carry
+  // its whole record with it. Campus is checked too, so a team whose campus and
+  // group disagree cannot appear under the wrong heading.
   function rowsForGroup(group: GroupId, campus: Campus) {
-    return sortStandings(
-      standings.filter((row) => {
-        const team = departments.find((d) => d.id === row.departmentId);
-        return team?.group === group && team?.campus === campus;
-      })
-    );
+    const teams = departments.filter((d) => d.group === group && d.campus === campus);
+    return sortStandings(computeStandings(matches, teams, group), matches, group);
   }
 
   const topScorers = [...players].filter((p) => p.goals > 0).sort((a, b) => b.goals - a.goals);

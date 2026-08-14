@@ -48,7 +48,13 @@ export async function POST(req: Request) {
         { status: 500 }
       );
     }
-    return NextResponse.json({ error: `Could not sign in: ${message}` }, { status: 500 });
+    // Everything else is generic. This endpoint is unauthenticated, and a
+    // driver error here would carry table names and the database hostname to
+    // whoever posted the form. The detail is in the log above.
+    return NextResponse.json(
+      { error: "Could not sign in. Please try again." },
+      { status: 500 }
+    );
   }
 }
 

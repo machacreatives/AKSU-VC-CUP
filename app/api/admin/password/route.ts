@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/require-admin";
+import { recordAudit } from "@/lib/db/audit";
 import { getAdminUserByUsername, setAdminPassword } from "@/lib/db/users";
 import { validatePassword, verifyPassword } from "@/lib/password";
 
@@ -27,6 +28,18 @@ export async function POST(req: Request) {
     if (passwordError) return NextResponse.json({ error: passwordError }, { status: 400 });
 
     await setAdminPassword(user.id, newPassword);
+
+    // Not destructive, but the single most useful line in the log if an account
+    // is ever suspected of being taken over.
+    await recordAudit({
+      actor: auth.user,
+      action: "user.password_reset",
+      targetType: "user",
+      targetId: user.id,
+      targetLabel: user.username,
+      detail: { self: true },
+    });
+
     return NextResponse.json({ ok: true });
   } catch (err) {
     return NextResponse.json(

@@ -98,6 +98,38 @@ export function computeClock(match: Match, now: number): ClockState {
   };
 }
 
+/**
+ * What minute to pre-fill when recording an event.
+ *
+ * `computeClock` returns a null minute at half time and full time, which is
+ * correct — no clock is running. But events are very often typed up during the
+ * interval or straight after the whistle, and a null minute rendered into an
+ * empty field became `Number("") === 0`, which passed validation. A booking in
+ * first-half stoppage time entered at half time was filed at 0' and sorted to
+ * the top of the timeline.
+ *
+ * So at a break the suggestion is the end of the half just played, including
+ * whatever stoppage time was announced. Still only a suggestion — the field
+ * stays editable.
+ */
+export function suggestedEventMinute(match: Match, now: number): number | null {
+  const clock = computeClock(match, now);
+  if (clock.minute !== null) return clock.minute;
+
+  if (match.status === "HT") {
+    return REGULATION.firstHalfEnd + (match.firstHalfAddedMinutes ?? 0);
+  }
+  if (match.status === "FT") {
+    // A match that reached full time without a second half was ended early;
+    // the first half is the most it can have played.
+    const played = match.secondHalfStartedAt
+      ? REGULATION.secondHalfEnd + (match.secondHalfAddedMinutes ?? 0)
+      : REGULATION.firstHalfEnd + (match.firstHalfAddedMinutes ?? 0);
+    return played;
+  }
+  return null;
+}
+
 // Which control the admin should see next, derived from the same state so the
 // buttons can never drift out of step with what the clock shows.
 export type ClockPhase = "not-started" | "first-half" | "half-time" | "second-half" | "finished";

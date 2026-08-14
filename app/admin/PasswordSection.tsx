@@ -5,6 +5,7 @@ import { MIN_PASSWORD_LENGTH } from "@/lib/password-policy";
 import { useMe } from "@/lib/api";
 import { ROLE_LABELS } from "@/lib/types";
 import { Banner, Notice, btnOutline, fieldFull, useNotice } from "./ui";
+import PasswordInput from "@/components/PasswordInput";
 
 /**
  * Change your own password.
@@ -62,17 +63,15 @@ export default function PasswordSection() {
         <h3 className="text-[13px] font-bold uppercase tracking-wide text-white">
           Change my password
         </h3>
-        <input
+        <PasswordInput
           className={fieldFull}
-          type="password"
           placeholder="Current password"
           value={currentPassword}
           onChange={(e) => setCurrentPassword(e.target.value)}
           autoComplete="current-password"
         />
-        <input
+        <PasswordInput
           className={fieldFull}
-          type="password"
           placeholder={`New password (min ${MIN_PASSWORD_LENGTH} characters)`}
           value={newPassword}
           onChange={(e) => setNewPassword(e.target.value)}

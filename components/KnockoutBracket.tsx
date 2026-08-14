@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { KNOCKOUT_STAGES, Match, MatchStage, STAGE_LABELS } from "@/lib/types";
+import { advancedTo, tieOutcome } from "@/lib/knockout";
 import { useDepartmentLookup } from "@/lib/data-context";
 import DeptBadge from "./DeptBadge";
 import MatchClock from "./MatchClock";
@@ -14,19 +15,18 @@ const BRACKET: { stage: MatchStage; ties: number }[] = [
   { stage: "FINAL", ties: 1 },
 ];
 
-function TieCard({ match }: { match: Match }) {
+function TieCard({ match, all }: { match: Match; all: Match[] }) {
   const getDepartment = useDepartmentLookup();
   const home = getDepartment(match.home.departmentId);
   const away = getDepartment(match.away.departmentId);
 
   const isLive = match.status === "LIVE" || match.status === "HT";
   const isFT = match.status === "FT";
-  const winner =
-    isFT && match.home.score !== match.away.score
-      ? match.home.score > match.away.score
-        ? "home"
-        : "away"
-      : null;
+  // Extra time and penalties included: a tie level after ninety minutes used to
+  // read as a finished match with no winner, forever.
+  const outcome = tieOutcome(match);
+  const winner = outcome.winner;
+  const next = advancedTo(match, all);
 
   const row = (side: "home" | "away") => {
     const team = side === "home" ? home : away;
@@ -63,13 +63,21 @@ function TieCard({ match }: { match: Match }) {
       {row("home")}
       {row("away")}
       <div className="flex items-center justify-between border-t border-line pt-1.5 text-[11.5px] text-white/60">
-        <span className="truncate">{match.kickoff}</span>
+        <span className="truncate">{outcome.note ?? match.kickoff}</span>
         {isLive ? (
           <MatchClock match={match} className="shrink-0 font-bold text-win" />
         ) : (
           <span className="shrink-0 font-semibold">{isFT ? "FT" : ""}</span>
         )}
       </div>
+      {outcome.unresolved && (
+        <p className="text-[11px] font-semibold text-gold">Level — to be decided</p>
+      )}
+      {next && (
+        <p className="truncate text-[11px] text-white/50">
+          Winner &rarr; {STAGE_LABELS[next.stage ?? "SF"]}
+        </p>
+      )}
     </Link>
   );
 }
@@ -135,7 +143,7 @@ export default function KnockoutBracket({ matches }: { matches: Match[] }) {
               </h2>
               <div className="space-y-2 lg:space-y-4">
                 {played.map((m) => (
-                  <TieCard key={m.id} match={m} />
+                  <TieCard key={m.id} match={m} all={matches} />
                 ))}
                 {Array.from({ length: placeholders }).map((_, i) => (
                   <TBDCard key={`tbd-${i}`} />
@@ -153,7 +161,7 @@ export default function KnockoutBracket({ matches }: { matches: Match[] }) {
           </h2>
           <div className="grid gap-2 sm:grid-cols-2 lg:max-w-md">
             {thirdPlace.map((m) => (
-              <TieCard key={m.id} match={m} />
+              <TieCard key={m.id} match={m} all={matches} />
             ))}
           </div>
         </section>

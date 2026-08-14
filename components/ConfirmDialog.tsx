@@ -36,6 +36,13 @@ export type ConfirmOptions = {
   onConfirm?: () => Promise<unknown>;
   /** Verb shown while onConfirm runs, e.g. "Deleting…". */
   busyLabel?: string;
+  /**
+   * Make the user type this exact word before the confirm button unlocks.
+   *
+   * For the handful of actions that destroy data no undo can bring back. A
+   * click can be a reflex; typing RESET cannot.
+   */
+  requireText?: string;
 };
 
 type Pending = ConfirmOptions & { resolve: (ok: boolean) => void };
@@ -65,13 +72,16 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
   const [pending, setPending] = useState<Pending | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [typed, setTyped] = useState("");
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
+  const typeFieldRef = useRef<HTMLInputElement>(null);
 
   const confirm = useCallback(
     (options: ConfirmOptions) =>
       new Promise<boolean>((resolve) => {
         setBusy(false);
         setError("");
+        setTyped("");
         setPending({ ...options, resolve });
       }),
     []
@@ -84,6 +94,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
     });
     setBusy(false);
     setError("");
+    setTyped("");
   }, []);
 
   const handleConfirm = useCallback(async () => {
@@ -112,13 +123,18 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
   // action cannot be dismissed.
   useEffect(() => {
     if (!pending) return;
-    confirmButtonRef.current?.focus();
+    // With a word to type, the field is where the user has to go next.
+    if (pending.requireText) typeFieldRef.current?.focus();
+    else confirmButtonRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !busy) close(false);
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [pending, busy, close]);
+
+  // Nothing to type means nothing to unlock.
+  const locked = Boolean(pending?.requireText) && typed.trim() !== pending?.requireText;
 
   return (
     <ConfirmContext.Provider value={confirm}>
@@ -157,6 +173,27 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
               </p>
             )}
 
+            {pending.requireText && (
+              <div className="mt-4 space-y-1.5">
+                <label
+                  htmlFor="confirm-type"
+                  className="block text-[12px] font-semibold text-white"
+                >
+                  Type <strong className="font-extrabold">{pending.requireText}</strong> to confirm
+                </label>
+                <input
+                  id="confirm-type"
+                  ref={typeFieldRef}
+                  value={typed}
+                  onChange={(e) => setTyped(e.target.value)}
+                  disabled={busy}
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="w-full rounded-[8px] border border-line bg-surface2 px-3 py-2 text-[14px] font-bold tracking-wide text-white outline-none focus:border-white/30"
+                />
+              </div>
+            )}
+
             <div className="mt-5 flex justify-end gap-2">
               <button
                 onClick={() => close(false)}
@@ -168,7 +205,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
               <button
                 ref={confirmButtonRef}
                 onClick={handleConfirm}
-                disabled={busy}
+                disabled={busy || locked}
                 className={`inline-flex items-center gap-2 rounded-[8px] px-4 py-2 text-[13.5px] font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-70 ${
                   pending.tone === "danger" ? "bg-loss" : "bg-accent"
                 }`}

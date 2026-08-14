@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import DeptBadge from "@/components/DeptBadge";
 import MatchClock from "@/components/MatchClock";
 import MatchDetailTabs from "@/components/MatchDetailTabs";
@@ -72,8 +73,17 @@ export default function MatchLive({
 
         <div className="mx-auto flex max-w-3xl items-start justify-between">
           <div className="flex flex-1 flex-col items-center gap-2">
-            <DeptBadge department={home} size={44} />
-            <span className="text-center text-[15px] font-bold text-white lg:text-[18px]">{home.name}</span>
+            {/* Straight to the team's profile — the scoreboard is where a
+                viewer wonders who these players are. */}
+            <Link
+              href={`/team/${home.id}`}
+              className="flex flex-col items-center gap-2 hover:underline"
+            >
+              <DeptBadge department={home} size={44} />
+              <span className="text-center text-[15px] font-bold text-white lg:text-[18px]">
+                {home.name}
+              </span>
+            </Link>
             <ScorersLine match={match} departmentId={home.id} align="left" />
           </div>
 
@@ -100,8 +110,17 @@ export default function MatchLive({
           </div>
 
           <div className="flex flex-1 flex-col items-center gap-2">
-            <DeptBadge department={away} size={44} />
-            <span className="text-center text-[15px] font-bold text-white lg:text-[18px]">{away.name}</span>
+            {/* Straight to the team's profile — the scoreboard is where a
+                viewer wonders who these players are. */}
+            <Link
+              href={`/team/${away.id}`}
+              className="flex flex-col items-center gap-2 hover:underline"
+            >
+              <DeptBadge department={away} size={44} />
+              <span className="text-center text-[15px] font-bold text-white lg:text-[18px]">
+                {away.name}
+              </span>
+            </Link>
             <ScorersLine match={match} departmentId={away.id} align="right" />
           </div>
         </div>

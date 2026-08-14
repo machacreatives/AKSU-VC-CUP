@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireSuperadmin } from "@/lib/require-admin";
-import { getMatch, resetMatch } from "@/lib/db/queries";
+import { getDepartments, getMatch, resetMatch } from "@/lib/db/queries";
+import { recordAudit } from "@/lib/db/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,26 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
     if (!existing) return NextResponse.json({ error: "Match not found" }, { status: 404 });
 
     await resetMatch(params.id);
+
+    const departments = await getDepartments();
+    const name = (departmentId: string) =>
+      departments.find((d) => d.id === departmentId)?.shortName ?? "?";
+
+    await recordAudit({
+      actor: auth.user,
+      action: "match.reset",
+      targetType: "match",
+      targetId: params.id,
+      targetLabel: `${name(existing.home.departmentId)} v ${name(existing.away.departmentId)}`,
+      // What the reset destroyed. Without it the line records that a match went
+      // back to 0-0 but not what it went back from.
+      detail: {
+        clearedScore: `${existing.home.score}-${existing.away.score}`,
+        clearedEvents: existing.events.length,
+        wasStatus: existing.status,
+      },
+    });
+
     return NextResponse.json({ ok: true, match: await getMatch(params.id) });
   } catch (err) {
     return NextResponse.json(

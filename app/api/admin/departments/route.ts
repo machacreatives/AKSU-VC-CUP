@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "@vercel/postgres";
 import { requireSuperadmin } from "@/lib/require-admin";
+import { recordAudit } from "@/lib/db/audit";
 import { deleteDepartment, getDepartments, getGroups, upsertDepartment } from "@/lib/db/queries";
 import { CAMPUSES, CAMPUS_LABELS, Campus, Department, GroupId } from "@/lib/types";
 
@@ -38,6 +39,10 @@ export async function POST(req: Request) {
     const campus = (body.campus ?? existing?.campus) as Campus;
     const group = (body.group ?? existing?.group) as GroupId;
     const color = String(body.color ?? existing?.color ?? "").trim();
+    // Blank means "nobody named", stored as NULL rather than an empty string so
+    // the profile can tell the two apart.
+    const coachRaw = body.coach === undefined ? existing?.coach ?? null : body.coach;
+    const coach = String(coachRaw ?? "").trim().slice(0, 80) || null;
 
     if (!name) return NextResponse.json({ error: "Team name is required." }, { status: 400 });
     if (shortName.length < 2 || shortName.length > 3) {
@@ -104,6 +109,7 @@ export async function POST(req: Request) {
       campus,
       group,
       color: color.toUpperCase(),
+      coach,
     };
 
     await upsertDepartment(department);
@@ -144,7 +150,25 @@ export async function DELETE(req: Request) {
       );
     }
 
+    // Named before the row goes: a team delete cascades to its squad and its
+    // administrator, so this can be the last trace any of them existed.
+    const { rows: team } = await sql`
+      SELECT d.name, d.short_name AS "shortName",
+             (SELECT COUNT(*)::int FROM players p WHERE p.department_id = d.id) AS "squadSize",
+             (SELECT COUNT(*)::int FROM admin_users u WHERE u.department_id = d.id) AS "admins"
+      FROM departments d WHERE d.id = ${id}`;
+
     await deleteDepartment(id);
+
+    await recordAudit({
+      actor: auth.user,
+      action: "department.delete",
+      targetType: "department",
+      targetId: id,
+      targetLabel: team[0] ? `${team[0].shortName} - ${team[0].name}` : null,
+      detail: team[0] ? { squadSize: team[0].squadSize, adminsRemoved: team[0].admins } : {},
+    });
+
     return NextResponse.json({ ok: true });
   } catch (err) {
     return NextResponse.json(

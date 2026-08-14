@@ -12,6 +12,8 @@ import MatchStatsControls from "./MatchStatsControls";
 import LineupEditor from "./LineupEditor";
 import ManOfTheMatch from "./ManOfTheMatch";
 import MatchRatings from "./MatchRatings";
+import ScoreReconcile from "./ScoreReconcile";
+import TieResolution from "./TieResolution";
 import EventForm from "./EventForm";
 import ScoreControls from "../../ScoreControls";
 import { Banner, EmptyState, Notice, btnDanger, btnSm, useNotice } from "../../ui";
@@ -203,6 +205,17 @@ export default function AdminMatchPage() {
 
       <Notice>{notice}</Notice>
 
+      {/* Only worth saying once the match is under way — an upcoming fixture
+          has no goals and no scoreline to disagree about. */}
+      {match.status !== "UPCOMING" && (
+        <ScoreReconcile
+          match={match}
+          home={homeTeam}
+          away={awayTeam}
+          canRecalculate={inThisMatch}
+        />
+      )}
+
       {/* Teamsheets come before the events: they are set before kick-off, and
           they are what the substitution picker offers all match. */}
       <LineupEditor
@@ -229,6 +242,12 @@ export default function AdminMatchPage() {
       </section>
 
       <MatchStatsControls match={match} home={homeTeam} away={awayTeam} ownSide={ownSide} />
+
+      {/* Who went through is a tournament decision, so it sits with the
+          superadmin alongside man of the match. */}
+      {superadmin && match.stage && match.stage !== "GROUP" && match.status === "FT" && (
+        <TieResolution match={match} home={homeTeam} away={awayTeam} />
+      )}
 
       {superadmin && <ManOfTheMatch match={match} home={homeTeam} away={awayTeam} />}
 

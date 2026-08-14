@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireSuperadmin } from "@/lib/require-admin";
+import { recordAudit } from "@/lib/db/audit";
 import {
   countGroupUsage,
   deleteGroup,
@@ -138,6 +139,16 @@ export async function DELETE(req: Request) {
         );
       }
       await mergeGroupInto(id, target.id);
+
+      await recordAudit({
+        actor: auth.user,
+        action: "group.delete",
+        targetType: "group",
+        targetId: id,
+        targetLabel: group.name,
+        detail: { movedTo: target.name, teams: usage.teams, matches: usage.matches },
+      });
+
       return NextResponse.json({ ok: true, movedTo: target.name, ...usage });
     }
 
@@ -156,6 +167,16 @@ export async function DELETE(req: Request) {
     }
 
     await deleteGroup(id);
+
+    await recordAudit({
+      actor: auth.user,
+      action: "group.delete",
+      targetType: "group",
+      targetId: id,
+      targetLabel: group.name,
+      detail: { campus: group.campus, teams: 0, matches: 0 },
+    });
+
     return NextResponse.json({ ok: true });
   } catch (err) {
     return NextResponse.json(

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { sql } from "@vercel/postgres";
 import crypto from "crypto";
 import { denyUnlessOwnTeam, requireAdmin } from "@/lib/require-admin";
+import { recordAudit } from "@/lib/db/audit";
 import { getDepartments } from "@/lib/db/queries";
 import {
   PLAYER_STATUSES,
@@ -152,33 +153,76 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       return NextResponse.json({ ok: true, dryRun: true, ready: clean.length });
     }
 
-    if (mode === "replace") {
-      await sql`DELETE FROM players WHERE department_id = ${params.id}`;
+    // Replace is a delete and an insert, and those are two statements. The old
+    // comment claimed no transaction was needed because the INSERT is atomic —
+    // true of the INSERT alone, and beside the point. If the insert failed the
+    // squad was already gone, and every teamsheet naming those players was
+    // left holding ids that no longer resolve.
+    const client = await sql.connect();
+    try {
+      await client.query("BEGIN");
+
+      if (mode === "replace") {
+        await client.query(`DELETE FROM players WHERE department_id = $1`, [params.id]);
+      }
+
+      await client.query(
+        `INSERT INTO players (id, name, number, position, department_id, squad_role, status)
+         SELECT * FROM unnest(
+           $1::text[], $2::text[], $3::int[], $4::text[], $5::text[], $6::text[], $7::text[]
+         )`,
+        [
+          clean.map(() => crypto.randomUUID()),
+          clean.map((r) => r.name),
+          clean.map((r) => r.number),
+          clean.map((r) => r.position),
+          clean.map(() => params.id),
+          clean.map((r) => r.squadRole),
+          clean.map((r) => r.status),
+        ]
+      );
+
+      // A squad has one captain and one vice-captain. This route writes rows
+      // directly rather than going through setSquadRole, and `append` only
+      // counted the roles inside the file — so importing a captain into a
+      // squad that already had one produced two, which the CHECK constraint
+      // does not catch because it validates the value, not its uniqueness.
+      for (const role of ["CAPTAIN", "VICE_CAPTAIN"] as const) {
+        if (!clean.some((r) => r.squadRole === role)) continue;
+        await client.query(
+          `UPDATE players SET squad_role = 'PLAYER'
+           WHERE department_id = $1 AND squad_role = $2
+             AND id <> (SELECT id FROM players
+                        WHERE department_id = $1 AND squad_role = $2
+                        ORDER BY id DESC LIMIT 1)`,
+          [params.id, role]
+        );
+      }
+
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
     }
 
-    // One multi-row INSERT: atomic on its own, so no explicit transaction is
-    // needed with the HTTP-mode driver.
-    await sql.query(
-      `INSERT INTO players (id, name, number, position, department_id, squad_role, status)
-       SELECT * FROM unnest(
-         $1::text[], $2::text[], $3::int[], $4::text[], $5::text[], $6::text[], $7::text[]
-       )`,
-      [
-        clean.map(() => crypto.randomUUID()),
-        clean.map((r) => r.name),
-        clean.map((r) => r.number),
-        clean.map((r) => r.position),
-        clean.map(() => params.id),
-        clean.map((r) => r.squadRole),
-        clean.map((r) => r.status),
-      ]
-    );
+    // Only "replace" is destructive -- it deletes the squad first -- so only
+    // that mode earns a line. An append that adds four players is routine.
+    if (mode === "replace") {
+      await recordAudit({
+        actor: auth.user,
+        action: "squad.bulk_replace",
+        targetType: "department",
+        targetId: params.id,
+        targetLabel: `${team.shortName} - ${team.name}`,
+        detail: { imported: clean.length },
+      });
+    }
 
     return NextResponse.json({ ok: true, imported: clean.length, replaced: mode === "replace" });
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : String(err) },
-      { status: 500 }
-    );
+    console.error("bulk squad import failed:", err instanceof Error ? err.message : err);
+    return NextResponse.json({ error: "Could not import the squad." }, { status: 500 });
   }
 }

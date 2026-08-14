@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "@vercel/postgres";
 import { requireSuperadmin } from "@/lib/require-admin";
+import { recordAudit } from "@/lib/db/audit";
 import { getDepartments, getGroups, upsertGroup } from "@/lib/db/queries";
 import { CAMPUS_LABELS, Campus, Group } from "@/lib/types";
 
@@ -16,6 +17,7 @@ type IncomingRow = {
   campus?: string;
   group?: string;
   color?: string;
+  coach?: string;
 };
 
 type RowError = { line: number; field: string; message: string };
@@ -93,6 +95,7 @@ export async function POST(req: Request) {
       campus: Campus;
       group: string;
       color: string;
+      coach: string | null;
       isUpdate: boolean;
     }[] = [];
 
@@ -183,6 +186,9 @@ export async function POST(req: Request) {
         }
       }
 
+      // Optional: a spreadsheet exported without the column just leaves it null.
+      const coach = String(row.coach ?? "").trim().slice(0, 80) || null;
+
       let color = colorRaw.toUpperCase();
       if (!color) {
         color = existing?.color ?? FALLBACK_COLORS[index % FALLBACK_COLORS.length];
@@ -202,6 +208,7 @@ export async function POST(req: Request) {
         campus: campus ?? "main",
         group: groupId,
         color,
+        coach,
         isUpdate: Boolean(existing),
       });
     });
@@ -233,11 +240,13 @@ export async function POST(req: Request) {
     // One multi-row upsert: atomic on its own, so no explicit transaction is
     // needed with the HTTP-mode driver.
     await sql.query(
-      `INSERT INTO departments (id, name, short_name, faculty, campus, "group", color)
-       SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[])
+      `INSERT INTO departments (id, name, short_name, faculty, campus, "group", color, coach)
+       SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[],
+                            $7::text[], $8::text[])
        ON CONFLICT (id) DO UPDATE SET
          name = EXCLUDED.name, short_name = EXCLUDED.short_name, faculty = EXCLUDED.faculty,
-         campus = EXCLUDED.campus, "group" = EXCLUDED."group", color = EXCLUDED.color`,
+         campus = EXCLUDED.campus, "group" = EXCLUDED."group", color = EXCLUDED.color,
+         coach = EXCLUDED.coach`,
       [
         clean.map((r) => r.id),
         clean.map((r) => r.name),
@@ -246,8 +255,22 @@ export async function POST(req: Request) {
         clean.map((r) => r.campus),
         clean.map((r) => r.group),
         clean.map((r) => r.color),
+        clean.map((r) => r.coach),
       ]
     );
+
+    await recordAudit({
+      actor: auth.user,
+      action: "department.bulk_import",
+      targetType: "department",
+      targetId: null,
+      targetLabel: `${clean.length} team${clean.length === 1 ? "" : "s"}`,
+      detail: {
+        created: creating,
+        updated: updating,
+        newGroups: [...newGroups.values()].map((g) => g.name),
+      },
+    });
 
     return NextResponse.json({
       ok: true,

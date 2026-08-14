@@ -24,7 +24,6 @@ CREATE TABLE IF NOT EXISTS players (
   number INTEGER NOT NULL,
   position TEXT NOT NULL CHECK (position IN ('GK','DF','MF','FW')),
   department_id TEXT NOT NULL REFERENCES departments(id) ON DELETE CASCADE,
-  level TEXT NOT NULL,
   rating NUMERIC,
   goals INTEGER NOT NULL DEFAULT 0,
   assists INTEGER NOT NULL DEFAULT 0,
@@ -87,7 +86,6 @@ CREATE INDEX IF NOT EXISTS idx_match_events_match ON match_events(match_id);
 
 ALTER TABLE players ADD COLUMN IF NOT EXISTS squad_role TEXT NOT NULL DEFAULT 'PLAYER';
 ALTER TABLE players ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'ACTIVE';
-ALTER TABLE players ALTER COLUMN level DROP NOT NULL;
 
 ALTER TABLE players DROP CONSTRAINT IF EXISTS players_squad_role_ck;
 ALTER TABLE players ADD CONSTRAINT players_squad_role_ck CHECK (squad_role IN ('CAPTAIN','VICE_CAPTAIN','PLAYER'));
@@ -262,11 +260,47 @@ ALTER TABLE matches ADD CONSTRAINT matches_stage_ck
 -- foreign key still holds for every row that names one.
 ALTER TABLE matches ALTER COLUMN "group" DROP NOT NULL;
 
+-- Resolving a knockout tie.
+--
+-- home_score/away_score stay the score of the match, extra time included, the
+-- way a result is normally written. These two record how it got there: whether
+-- extra time was played, and the shoot-out if there was one. Without them a
+-- quarter-final finishing 1-1 was a completed tie with nobody advancing, and
+-- the app had no way to say who went through.
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS went_to_extra_time BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS home_penalties INTEGER;
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS away_penalties INTEGER;
+
+-- A shoot-out is either recorded for both sides or neither, and it cannot end
+-- level -- somebody has to go through.
+ALTER TABLE matches DROP CONSTRAINT IF EXISTS matches_penalties_ck;
+ALTER TABLE matches ADD CONSTRAINT matches_penalties_ck
+  CHECK (
+    (home_penalties IS NULL AND away_penalties IS NULL)
+    OR (home_penalties IS NOT NULL AND away_penalties IS NOT NULL
+        AND home_penalties >= 0 AND away_penalties >= 0
+        AND home_penalties <> away_penalties)
+  );
+
 -- Ratings are computed from match events now (lib/ratings.ts), so a stored
 -- column is a second source of truth that can only drift. Nothing ever wrote
 -- this one -- it was NULL for every row and every leaderboard that read it was
 -- silently empty.
 ALTER TABLE players DROP COLUMN IF EXISTS rating;
+
+-- Goals, assists and cards are counted from match_events on read (see
+-- getPlayers). They were counter columns incremented alongside every event
+-- write, which made two sources of truth for the same number: the leaderboards
+-- read the counters while the ratings and the lineup board counted events, and
+-- nothing detected disagreement. A failed rollback, a direct SQL fix, or a
+-- restore made them differ permanently.
+ALTER TABLE players DROP COLUMN IF EXISTS goals;
+ALTER TABLE players DROP COLUMN IF EXISTS assists;
+ALTER TABLE players DROP COLUMN IF EXISTS yellow_cards;
+ALTER TABLE players DROP COLUMN IF EXISTS red_cards;
+
+-- Dead since the level field was removed from the squad form.
+ALTER TABLE players DROP COLUMN IF EXISTS level;
 
 -- Administrator roles.
 --
@@ -295,6 +329,47 @@ ALTER TABLE admin_users ADD CONSTRAINT admin_users_department_fk
   FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE CASCADE;
 
 CREATE INDEX IF NOT EXISTS idx_admin_users_department ON admin_users(department_id);
+
+-- Usernames are compared case-insensitively at login, but the UNIQUE
+-- constraint on the raw column is byte-exact -- so "Admin" and "admin" could
+-- both be inserted, and the lookup would then return whichever row Postgres
+-- happened to yield first. Which account a password authenticated as could
+-- change between requests. This makes the uniqueness match the lookup.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_admin_users_username_lower ON admin_users (LOWER(username));
+
+-- The coach, shown on the team profile.
+--
+-- Nullable and free text: a departmental side may not have named one, and
+-- "TBC" stored as a real value would print as if it were the coach's name.
+ALTER TABLE departments ADD COLUMN IF NOT EXISTS coach TEXT;
+
+-- Who did what.
+--
+-- Destructive administration left no trace at all: a reset semi-final, a
+-- deleted squad or a removed account looked exactly like data that had never
+-- existed, and with several team administrators sharing the dashboard there was
+-- no way to answer who did it.
+--
+-- actor_username and target_label are copies, not joins, and that is the point.
+-- A log whose rows blank out when the account or the team behind them is
+-- deleted is useless precisely in the case it exists for -- the actor's own
+-- account being removed. The id columns keep the link while it lasts; the text
+-- columns keep the answer after it does not.
+CREATE TABLE IF NOT EXISTS admin_audit_log (
+  id TEXT PRIMARY KEY,
+  actor_id TEXT REFERENCES admin_users(id) ON DELETE SET NULL,
+  actor_username TEXT NOT NULL,
+  actor_role TEXT NOT NULL,
+  action TEXT NOT NULL,
+  target_type TEXT NOT NULL,
+  target_id TEXT,
+  target_label TEXT,
+  detail JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- The log is only ever read newest-first.
+CREATE INDEX IF NOT EXISTS idx_audit_created_at ON admin_audit_log (created_at DESC);
 `;
 
 // Split for drivers that accept only one statement per call.

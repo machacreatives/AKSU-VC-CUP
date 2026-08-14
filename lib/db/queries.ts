@@ -30,17 +30,19 @@ function freshRead() {
 
 export async function getDepartments(): Promise<Department[]> {
   freshRead();
-  const { rows } = await sql`SELECT id, name, short_name AS "shortName", faculty, campus, "group", color FROM departments ORDER BY name`;
+  const { rows } = await sql`SELECT id, name, short_name AS "shortName", faculty, campus, "group", color, coach FROM departments ORDER BY name`;
   return rows as Department[];
 }
 
 export async function upsertDepartment(d: Department) {
   await sql`
-    INSERT INTO departments (id, name, short_name, faculty, campus, "group", color)
-    VALUES (${d.id}, ${d.name}, ${d.shortName}, ${d.faculty}, ${d.campus}, ${d.group}, ${d.color})
+    INSERT INTO departments (id, name, short_name, faculty, campus, "group", color, coach)
+    VALUES (${d.id}, ${d.name}, ${d.shortName}, ${d.faculty}, ${d.campus}, ${d.group}, ${d.color},
+            ${d.coach ?? null})
     ON CONFLICT (id) DO UPDATE SET
       name = EXCLUDED.name, short_name = EXCLUDED.short_name, faculty = EXCLUDED.faculty,
-      campus = EXCLUDED.campus, "group" = EXCLUDED."group", color = EXCLUDED.color
+      campus = EXCLUDED.campus, "group" = EXCLUDED."group", color = EXCLUDED.color,
+      coach = EXCLUDED.coach
   `;
 }
 
@@ -145,13 +147,50 @@ export async function countMatchesAtVenue(name: string): Promise<number> {
 
 // ---------- Players ----------
 
+/**
+ * Squads, with goals, assists and cards counted from the events themselves.
+ *
+ * These used to be counter columns on the players row, incremented and
+ * decremented alongside every event write. That made two sources of truth for
+ * the same number — the leaderboards read the counters while the ratings, the
+ * lineup board and the match page all counted from events — with nothing
+ * detecting disagreement and no way to repair it once it happened.
+ *
+ * Counting on read is a join over a table that holds a few hundred rows for a
+ * tournament of this size, and it cannot drift by construction.
+ *
+ * Every COUNT is cast to int: Postgres returns int8, which the driver hands
+ * back as a string, and `"3" > 0` is not the comparison the leaderboards think
+ * they are making.
+ */
 export async function getPlayers(): Promise<Player[]> {
   freshRead();
   const { rows } = await sql`
-    SELECT id, name, number, position, department_id AS "departmentId",
-           squad_role AS "squadRole", status,
-           goals, assists, yellow_cards AS "yellowCards", red_cards AS "redCards"
-    FROM players ORDER BY department_id, number
+    SELECT p.id, p.name, p.number, p.position, p.department_id AS "departmentId",
+           p.squad_role AS "squadRole", p.status,
+           COALESCE(g.goals, 0)   AS goals,
+           COALESCE(a.assists, 0) AS assists,
+           COALESCE(c.yellows, 0) AS "yellowCards",
+           COALESCE(c.reds, 0)    AS "redCards"
+    FROM players p
+    LEFT JOIN (
+      SELECT player_id, COUNT(*)::int AS goals
+      FROM match_events WHERE type = 'GOAL' AND player_id IS NOT NULL
+      GROUP BY player_id
+    ) g ON g.player_id = p.id
+    LEFT JOIN (
+      SELECT assist_player_id AS pid, COUNT(*)::int AS assists
+      FROM match_events WHERE assist_player_id IS NOT NULL
+      GROUP BY assist_player_id
+    ) a ON a.pid = p.id
+    LEFT JOIN (
+      SELECT player_id,
+             (COUNT(*) FILTER (WHERE type = 'YELLOW'))::int AS yellows,
+             (COUNT(*) FILTER (WHERE type = 'RED'))::int    AS reds
+      FROM match_events WHERE player_id IS NOT NULL
+      GROUP BY player_id
+    ) c ON c.player_id = p.id
+    ORDER BY p.department_id, p.number
   `;
   return rows as Player[];
 }
@@ -204,8 +243,66 @@ export async function setSquadRole(playerId: string, departmentId: string, role:
   await sql`UPDATE players SET squad_role = ${role} WHERE id = ${playerId}`;
 }
 
+/**
+ * Matches whose teamsheet names this player, split by whether they have been
+ * played.
+ *
+ * The starting XI and bench are TEXT[] columns and the captain is a bare TEXT,
+ * so no foreign key can protect them. Deleting a player used to leave their id
+ * behind in every teamsheet they appeared in, and the lineup board then drew a
+ * shirt numbered 0 named "Unknown" — which the ratings engine went on to rate.
+ */
+export async function playerTeamsheetUsage(
+  playerId: string
+): Promise<{ played: string[]; upcoming: string[] }> {
+  freshRead();
+  const { rows } = await sql`
+    SELECT id, (first_half_started_at IS NOT NULL OR status <> 'UPCOMING') AS started
+    FROM matches
+    WHERE ${playerId} = ANY(COALESCE(home_starting_xi, '{}'))
+       OR ${playerId} = ANY(COALESCE(away_starting_xi, '{}'))
+       OR ${playerId} = ANY(COALESCE(home_bench, '{}'))
+       OR ${playerId} = ANY(COALESCE(away_bench, '{}'))
+       OR home_captain_id = ${playerId}
+       OR away_captain_id = ${playerId}
+  `;
+  return {
+    played: rows.filter((r) => r.started).map((r) => r.id as string),
+    upcoming: rows.filter((r) => !r.started).map((r) => r.id as string),
+  };
+}
+
+/**
+ * Remove a player, taking their name off any teamsheet that has not been used
+ * yet.
+ *
+ * A teamsheet for a match still to come is a plan and can be edited; one for a
+ * match already played is a record, and the caller refuses the delete in that
+ * case rather than quietly shrinking a starting eleven to ten.
+ */
 export async function deletePlayer(id: string) {
-  await sql`DELETE FROM players WHERE id = ${id}`;
+  const client = await sql.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      `UPDATE matches
+       SET home_starting_xi = array_remove(home_starting_xi, $1),
+           away_starting_xi = array_remove(away_starting_xi, $1),
+           home_bench       = array_remove(home_bench, $1),
+           away_bench       = array_remove(away_bench, $1),
+           home_captain_id  = NULLIF(home_captain_id, $1),
+           away_captain_id  = NULLIF(away_captain_id, $1)
+       WHERE first_half_started_at IS NULL AND status = 'UPCOMING'`,
+      [id]
+    );
+    await client.query(`DELETE FROM players WHERE id = $1`, [id]);
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 // ---------- Matches ----------
@@ -229,6 +326,9 @@ function rowToMatchBase(row: any): Omit<Match, "events"> {
     group: row.group ?? null,
     stage: row.stage ?? "GROUP",
     manOfTheMatchId: row.man_of_the_match_id ?? null,
+    wentToExtraTime: row.went_to_extra_time ?? false,
+    homePenalties: row.home_penalties ?? null,
+    awayPenalties: row.away_penalties ?? null,
     venue: row.venue,
     home: {
       departmentId: row.home_department_id,
@@ -308,7 +408,8 @@ export async function upsertMatch(m: Match) {
       home_department_id, away_department_id, home_score, away_score,
       home_formation, away_formation, home_starting_xi, away_starting_xi,
       home_bench, away_bench,
-      home_captain_id, away_captain_id, home_stats, away_stats
+      home_captain_id, away_captain_id, home_stats, away_stats,
+      went_to_extra_time, home_penalties, away_penalties
     ) VALUES (
       $1, $2, $3, $4, $5, $6, $7, $8, $9,
       $10, $11, $12, $13,
@@ -316,7 +417,8 @@ export async function upsertMatch(m: Match) {
       $16, $17,
       $18, $19,
       $20, $21,
-      $22, $23
+      $22, $23,
+      $24, $25, $26
     )
     ON CONFLICT (id) DO UPDATE SET
       status = EXCLUDED.status, minute = EXCLUDED.minute, kickoff = EXCLUDED.kickoff,
@@ -329,7 +431,10 @@ export async function upsertMatch(m: Match) {
       home_starting_xi = EXCLUDED.home_starting_xi, away_starting_xi = EXCLUDED.away_starting_xi,
       home_bench = EXCLUDED.home_bench, away_bench = EXCLUDED.away_bench,
       home_captain_id = EXCLUDED.home_captain_id, away_captain_id = EXCLUDED.away_captain_id,
-      home_stats = EXCLUDED.home_stats, away_stats = EXCLUDED.away_stats
+      home_stats = EXCLUDED.home_stats, away_stats = EXCLUDED.away_stats,
+      went_to_extra_time = EXCLUDED.went_to_extra_time,
+      home_penalties = EXCLUDED.home_penalties,
+      away_penalties = EXCLUDED.away_penalties
   `,
     [
       m.id, m.status, m.minute ?? null, m.kickoff, m.kickoffAt ?? null, m.round,
@@ -341,6 +446,9 @@ export async function upsertMatch(m: Match) {
       m.home.captainId ?? null, m.away.captainId ?? null,
       m.home.stats ? JSON.stringify(m.home.stats) : null,
       m.away.stats ? JSON.stringify(m.away.stats) : null,
+      m.wentToExtraTime ?? false,
+      m.homePenalties ?? null,
+      m.awayPenalties ?? null,
     ]
   );
 }
@@ -411,25 +519,30 @@ export async function setManOfTheMatch(matchId: string, playerId: string | null)
 // statement would leave the Top Scorers table crediting goals from a match
 // that no longer records them.
 export async function resetMatch(id: string) {
-  const { rows } = await sql`SELECT id FROM match_events WHERE match_id = ${id}`;
-  for (const row of rows) {
-    await deleteMatchEvent(row.id as number);
+  // Events used to be deleted one at a time so each could roll its goal back
+  // off a player's counter — 3 statements per event, none of it transactional.
+  // Stats are counted from the events now, so removing them removes their
+  // contribution, and the whole reset is two statements in one transaction.
+  const client = await sql.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(`DELETE FROM match_events WHERE match_id = $1`, [id]);
+    await client.query(
+      `UPDATE matches
+       SET status = 'UPCOMING', minute = NULL, home_score = 0, away_score = 0,
+           first_half_started_at = NULL, second_half_started_at = NULL,
+           first_half_added_minutes = 0, second_half_added_minutes = 0,
+           home_stats = NULL, away_stats = NULL
+       WHERE id = $1`,
+      [id]
+    );
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
   }
-
-  await sql`
-    UPDATE matches
-    SET status = 'UPCOMING',
-        minute = NULL,
-        home_score = 0,
-        away_score = 0,
-        first_half_started_at = NULL,
-        second_half_started_at = NULL,
-        first_half_added_minutes = 0,
-        second_half_added_minutes = 0,
-        home_stats = NULL,
-        away_stats = NULL
-    WHERE id = ${id}
-  `;
 }
 
 // Team stats for a match — possession, shots and so on.
@@ -452,55 +565,31 @@ export async function setMatchStats(
   `;
 }
 
+/**
+ * Record how a knockout tie was decided.
+ *
+ * Separate from upsertMatch for the same reason the stats and lineup writers
+ * are: settling a tie after the whistle must not be able to touch the clock,
+ * the teamsheets or the fixture itself.
+ */
+export async function setTieResolution(
+  id: string,
+  resolution: { wentToExtraTime: boolean; homePenalties: number | null; awayPenalties: number | null }
+) {
+  await sql`
+    UPDATE matches
+    SET went_to_extra_time = ${resolution.wentToExtraTime},
+        home_penalties = ${resolution.homePenalties},
+        away_penalties = ${resolution.awayPenalties}
+    WHERE id = ${id}
+  `;
+}
+
 export async function deleteMatch(id: string) {
-  // match_events cascades on delete, but the players' goal/card totals live on
-  // the players row and would be left crediting a match that no longer exists.
-  // resetMatch removes the events properly first, rolling those totals back.
-  await resetMatch(id);
+  // match_events cascades. Player stats are counted from those events, so the
+  // match's contribution disappears with it — there is nothing left to roll
+  // back by hand, which is what the old resetMatch-first dance was for.
   await sql`DELETE FROM matches WHERE id = ${id}`;
-}
-
-// The leaderboards read counters on the players row, so an event has to move
-// them. Events now carry player_id, so this targets the exact squad member
-// rather than matching on a typed name — which credited nobody on a typo,
-// double-counted two players sharing a name, and orphaned a player's history
-// the moment they were renamed.
-const STAT_COLUMN: Partial<Record<MatchEvent["type"], string>> = {
-  GOAL: "goals",
-  YELLOW: "yellow_cards",
-  RED: "red_cards",
-};
-
-async function bump(column: string, playerId: string, delta: 1 | -1) {
-  // `column` is only ever one of the literals above, never user input.
-  await sql.query(
-    `UPDATE players SET ${column} = GREATEST(${column} + $1, 0) WHERE id = $2`,
-    [delta, playerId]
-  );
-}
-
-async function adjustPlayerStats(e: MatchEvent, delta: 1 | -1) {
-  const column = STAT_COLUMN[e.type];
-
-  if (column) {
-    if (e.playerId) {
-      await bump(column, e.playerId, delta);
-    } else if (e.playerName) {
-      // Legacy rows recorded before events carried an id.
-      await sql.query(
-        `UPDATE players SET ${column} = GREATEST(${column} + $1, 0)
-         WHERE department_id = $2 AND LOWER(name) = LOWER($3)`,
-        [delta, e.departmentId, e.playerName]
-      );
-    }
-  }
-
-  // An assist is part of the goal, not a separate event, so it is credited
-  // here. Nothing wrote players.assists before this, which is why the public
-  // Top Assists tab could never show anything.
-  if (e.type === "GOAL" && e.assistPlayerId) {
-    await bump("assists", e.assistPlayerId, delta);
-  }
 }
 
 // An event says something about the team as well as the player, and until now
@@ -570,26 +659,35 @@ async function applyTeamEffects(matchId: string, e: MatchEvent, delta: 1 | -1) {
     // appear because of a deletion.
     if (!stored && delta === -1) return;
 
-    const base = stored ?? DEFAULT_TEAM_STATS;
-    const next: TeamMatchStats = { ...base };
+    const column = side === "home" ? "home_stats" : "away_stats";
+
+    // Incremented inside Postgres rather than read into JS, changed, and
+    // written back. Two goals in the same second both used to read shots: 4
+    // and both write 5, so one shot vanished — and the same blob is written
+    // wholesale by the stats panel's debounced save, which could overwrite a
+    // goal recorded during its 700ms window.
+    //
+    // Each field reads from the *original* column value, not from the
+    // accumulating expression: the keys are independent, so this stays linear
+    // in size instead of nesting exponentially.
+    const params: unknown[] = [matchId, JSON.stringify(DEFAULT_TEAM_STATS)];
+    const base = `COALESCE(${column}, $2::jsonb)`;
+    let expression = base;
+
     for (const [key, amount] of Object.entries(statDelta)) {
-      const field = key as keyof TeamMatchStats;
-      next[field] = Math.max(0, base[field] + amount * delta);
+      // `key` comes from TEAM_STAT_DELTAS, a module constant — never a request.
+      params.push(amount * delta);
+      const placeholder = `$${params.length}`;
+      expression =
+        `jsonb_set(${expression}, '{${key}}', ` +
+        `to_jsonb(GREATEST(0, COALESCE((${base}->>'${key}')::int, 0) + ${placeholder})))`;
     }
 
-    const column = side === "home" ? "home_stats" : "away_stats";
-    await sql.query(`UPDATE matches SET ${column} = $1::jsonb WHERE id = $2`, [
-      JSON.stringify(next),
-      matchId,
-    ]);
+    await sql.query(`UPDATE matches SET ${column} = ${expression} WHERE id = $1`, params);
   }
 }
 
-export async function addMatchEvent(
-  matchId: string,
-  e: MatchEvent,
-  { syncPlayerStats = true }: { syncPlayerStats?: boolean } = {}
-) {
+export async function addMatchEvent(matchId: string, e: MatchEvent) {
   await sql`
     INSERT INTO match_events (
       match_id, minute, type, department_id,
@@ -604,26 +702,23 @@ export async function addMatchEvent(
       ${e.goalType ?? null}, ${e.detail ?? null}
     )
   `;
-  if (syncPlayerStats) {
-    await adjustPlayerStats(e, 1);
-    await applyTeamEffects(matchId, e, 1);
-  }
+  await applyTeamEffects(matchId, e, 1);
 }
 
 export async function deleteMatchEvent(eventId: number) {
-  // Read it back first so removing a mistake also rolls back the counters, the
-  // assist, the scoreline and the team stats it moved.
+  // One statement, not SELECT-then-DELETE. Two concurrent deletes — a
+  // double-tap, a retried request — both used to read the row before either
+  // delete landed, so both applied the rollback and the match lost two goals
+  // for one removal. RETURNING makes the loser see no rows and do nothing.
   const { rows } = await sql`
-    SELECT match_id AS "matchId", type, department_id AS "departmentId",
-           player_id AS "playerId", player_name AS "playerName",
-           assist_player_id AS "assistPlayerId", minute
-    FROM match_events WHERE id = ${eventId}
+    DELETE FROM match_events WHERE id = ${eventId}
+    RETURNING match_id AS "matchId", type, department_id AS "departmentId",
+              player_id AS "playerId", player_name AS "playerName",
+              assist_player_id AS "assistPlayerId", minute
   `;
-  await sql`DELETE FROM match_events WHERE id = ${eventId}`;
   if (rows.length === 0) return;
 
   const event = rows[0] as MatchEvent & { matchId: string };
-  await adjustPlayerStats(event, -1);
   await applyTeamEffects(event.matchId, event, -1);
 }
 
