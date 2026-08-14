@@ -12,6 +12,7 @@ type Draft = {
   campus: string;
   group: string;
   color: string;
+  coach: string;
 };
 
 type RowError = { line: number; field: string; message: string };
@@ -67,6 +68,7 @@ export default function TeamCsvImport({
         campus: record.campus ?? "",
         group: record.group ?? "",
         color: record.color ?? "",
+        coach: record.coach ?? "",
       }))
     );
   }
@@ -130,6 +132,7 @@ export default function TeamCsvImport({
     { key: "campus", label: "Campus", width: "w-28" },
     { key: "group", label: "Group", width: "w-20" },
     { key: "color", label: "Colour", width: "w-24" },
+    { key: "coach", label: "Coach", width: "w-full min-w-[8rem]" },
   ];
 
   return (
@@ -149,9 +152,10 @@ export default function TeamCsvImport({
       </div>
 
       <p className="text-[12.5px] text-white/80">
-        Columns: <span className="font-bold">name, short_name, faculty, campus, group, color</span>.
+        Columns: <span className="font-bold">name, short_name, faculty, campus, group, color, coach</span>.
         Campus is main or obioakpa. Group is the letter — one that does not exist yet is created on
-        that campus. Colour is a hex value like #F2661F, and a blank one is chosen for you.
+        that campus. Colour is a hex value like #F2661F, and a blank one is chosen for you. Coach is
+        optional.
       </p>
 
       <div className="grid gap-3 lg:grid-cols-2">

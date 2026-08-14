@@ -110,6 +110,9 @@ export const TEAM_HEADERS: Record<string, string> = {
   colour: "color",
   "team color": "color",
   "team colour": "color",
+  coach: "coach",
+  "coach name": "coach",
+  manager: "coach",
 };
 
 export function normaliseHeader(
@@ -145,8 +148,8 @@ Aniekan Peter,4,DF,vice_captain,injured
 // Colour is optional in the template on purpose: filling sixteen hex codes by
 // hand is the sort of thing that stops a bulk import being worth doing, and a
 // blank one gets a distinct colour assigned automatically.
-export const TEAM_CSV_TEMPLATE = `name,short_name,faculty,campus,group,color
-Computer Science,CSC,Physical Sciences,main,A,#F2661F
-Law,LAW,Law,main,A,
-Accounting,ACC,Management Sciences,obioakpa,C,
+export const TEAM_CSV_TEMPLATE = `name,short_name,faculty,campus,group,color,coach
+Computer Science,CSC,Physical Sciences,main,A,#F2661F,Emmanuel Udo
+Law,LAW,Law,main,A,,
+Accounting,ACC,Management Sciences,obioakpa,C,,
 `;
