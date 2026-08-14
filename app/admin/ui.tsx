@@ -1,6 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { Skeleton } from "@/components/Skeleton";
+import { useMe } from "@/lib/api";
 
 // Shared admin form furniture. These class strings were duplicated verbatim
 // across NewMatchForm and AccountSection; every new screen would have copied
@@ -116,6 +119,47 @@ export function PageHeader({
       {action}
     </div>
   );
+}
+
+/**
+ * Wraps a page that belongs to a superadmin.
+ *
+ * Middleware gates the /admin area but cannot check a role — it verifies the
+ * cookie signature on the Edge with no database. So a team admin who types the
+ * URL still loads the page shell, and without this they would see a screen of
+ * empty panels and failed requests instead of an answer.
+ *
+ * This is not the security boundary. Every write behind these pages is refused
+ * again by its own route handler.
+ */
+export function RequireSuperadmin({ children }: { children: React.ReactNode }) {
+  const { data: me, isPending } = useMe();
+
+  if (isPending) {
+    return (
+      <div className="mx-auto max-w-5xl px-4 py-10 lg:px-6">
+        <Skeleton className="h-24 w-full rounded-card" />
+      </div>
+    );
+  }
+
+  if (me?.role !== "SUPERADMIN") {
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-10 lg:px-6">
+        <EmptyState
+          title="Not available for your account"
+          body="This part of the dashboard belongs to a superadmin. Your account manages your own team — its squad, teamsheets, and the events and stats of its matches."
+          action={
+            <Link href="/admin" className="text-[13px] font-bold text-accent">
+              Back to your matches &rarr;
+            </Link>
+          }
+        />
+      </div>
+    );
+  }
+
+  return <>{children}</>;
 }
 
 export function EmptyState({ title, body, action }: { title: string; body?: string; action?: React.ReactNode }) {

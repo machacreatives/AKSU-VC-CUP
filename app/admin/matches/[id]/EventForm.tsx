@@ -33,17 +33,20 @@ export default function EventForm({
   match,
   home,
   away,
+  ownDepartmentId = null,
   onAdded,
 }: {
   match: Match;
   home: Department;
   away: Department;
+  /** Null for a superadmin. A team admin records only their own team's events. */
+  ownDepartmentId?: string | null;
   onAdded: () => void;
 }) {
   const { data: allPlayers = [] } = usePlayers();
 
   const [type, setType] = useState<MatchEventType>("GOAL");
-  const [deptId, setDeptId] = useState(match.home.departmentId);
+  const [deptId, setDeptId] = useState(ownDepartmentId ?? match.home.departmentId);
   const [playerId, setPlayerId] = useState("");
   const [assistId, setAssistId] = useState("");
   const [goalType, setGoalType] = useState<GoalType>("OPEN_PLAY");
@@ -206,9 +209,18 @@ export default function EventForm({
           <span className="block text-[11.5px] font-semibold uppercase tracking-wide text-white">
             Team
           </span>
-          <select value={deptId} onChange={(e) => chooseTeam(e.target.value)} className={`${field} w-28`}>
-            <option value={match.home.departmentId}>{home.shortName}</option>
-            <option value={match.away.departmentId}>{away.shortName}</option>
+          <select
+            value={deptId}
+            onChange={(e) => chooseTeam(e.target.value)}
+            className={`${field} w-28`}
+            disabled={ownDepartmentId !== null}
+          >
+            {(ownDepartmentId === null || ownDepartmentId === match.home.departmentId) && (
+              <option value={match.home.departmentId}>{home.shortName}</option>
+            )}
+            {(ownDepartmentId === null || ownDepartmentId === match.away.departmentId) && (
+              <option value={match.away.departmentId}>{away.shortName}</option>
+            )}
           </select>
         </label>
 

@@ -1,3 +1,19 @@
+/**
+ * SUPERADMIN runs the tournament. TEAM_ADMIN runs one department: its squad,
+ * its teamsheets, and the events and stats of matches it plays in.
+ *
+ * Here rather than in lib/db/users.ts because client components branch on it,
+ * and that module pulls in the Postgres driver.
+ */
+export type AdminRole = "SUPERADMIN" | "TEAM_ADMIN";
+
+export const ADMIN_ROLES: AdminRole[] = ["SUPERADMIN", "TEAM_ADMIN"];
+
+export const ROLE_LABELS: Record<AdminRole, string> = {
+  SUPERADMIN: "Superadmin",
+  TEAM_ADMIN: "Team admin",
+};
+
 export type Campus = "main" | "obioakpa";
 
 export const CAMPUSES: Campus[] = ["main", "obioakpa"];

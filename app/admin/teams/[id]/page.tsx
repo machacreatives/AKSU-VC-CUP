@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import DeptBadge from "@/components/DeptBadge";
 import { useConfirm } from "@/components/ConfirmDialog";
-import { queryKeys, useDepartments, usePlayers } from "@/lib/api";
+import { queryKeys, useDepartments, useMe, usePlayers } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   PLAYER_STATUSES,
@@ -57,6 +57,12 @@ export default function TeamSquadPage() {
   const squad = (playersQuery.data ?? [])
     .filter((pl) => pl.departmentId === params.id)
     .sort((a, b) => POSITION_ORDER[a.position] - POSITION_ORDER[b.position] || a.number - b.number);
+
+  const { data: me } = useMe();
+  const superadmin = me?.role === "SUPERADMIN";
+  // A team admin reaching another team's squad by URL gets an explanation,
+  // not a half-working editor whose every save comes back 403.
+  const otherTeam = Boolean(me && !superadmin && me.departmentId !== params.id);
 
   const loading = teamsQuery.isPending || playersQuery.isPending;
 
@@ -178,18 +184,37 @@ export default function TeamSquadPage() {
     );
   }
 
+  if (otherTeam) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-10 lg:px-6">
+        <EmptyState
+          title="That is not your team"
+          body="Your account manages one squad. Every other team's details are on the public site."
+          action={
+            <Link href="/admin" className="text-[13px] font-bold text-accent">
+              Back to your matches &rarr;
+            </Link>
+          }
+        />
+      </div>
+    );
+  }
+
   const roleTaken = (role: SquadRole) => squad.find((p) => p.squadRole === role && p.id !== editingId);
 
   return (
     <div className="mx-auto max-w-5xl space-y-5 px-4 py-5 lg:px-6 lg:py-7">
-      <Link href="/admin/teams" className="text-[13px] font-bold text-accent">
-        &larr; Back to teams
+      <Link href={superadmin ? "/admin/teams" : "/admin"} className="text-[13px] font-bold text-accent">
+        &larr; {superadmin ? "Back to teams" : "Back to your matches"}
       </Link>
 
       <PageHeader
         title={team.name}
         subtitle={`${team.shortName} · ${team.faculty} · Group ${team.group}`}
         action={
+          // The team record itself — name, campus, group, colour — decides which
+          // table the team appears in, so it belongs with the tournament settings.
+          superadmin &&
           !editingTeam && (
             <button onClick={() => setEditingTeam(true)} className={btnOutline}>
               Edit team
@@ -201,7 +226,7 @@ export default function TeamSquadPage() {
       {error && <Banner tone="error">{error}</Banner>}
       <Notice>{notice}</Notice>
 
-      {editingTeam && (
+      {editingTeam && superadmin && (
         <TeamForm
           team={team}
           onCancel={() => setEditingTeam(false)}

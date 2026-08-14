@@ -56,10 +56,13 @@ export default function StatList({
   const shown = Number.isFinite(limit) ? players.slice(0, limit) : players;
 
   return (
-    // One column on phones. On large screens the rows flow into two columns
-    // inside the same card, so a 12-name leaderboard fills the width instead
-    // of running down a narrow strip.
-    <div className="overflow-hidden rounded-card border border-line bg-surface shadow-premium lg:grid lg:grid-cols-2">
+    // A single list at every width, so second place is always directly under
+    // first. This used to flow into two columns on a large screen to fill the
+    // page, which put rank 2 beside rank 1 and rank 7 back at the top — the
+    // reading order stopped matching the ranking. Capped instead, so the row
+    // stays a readable length rather than stretching a name and a number to
+    // opposite edges of a wide monitor.
+    <div className="mx-auto w-full overflow-hidden rounded-card border border-line bg-surface shadow-premium lg:max-w-3xl">
       {shown.map((p, i) => {
         const d = getDepartment(p.departmentId);
         const isLast = i === shown.length - 1;
@@ -68,7 +71,7 @@ export default function StatList({
             key={p.id}
             className={`flex items-center gap-3 px-3 py-2.5 lg:px-4 lg:py-3 ${
               isLast ? "" : "border-b border-line"
-            } ${i % 2 === 0 ? "lg:border-r lg:border-r-line" : ""}`}
+            }`}
           >
             <span className="tabular w-4 text-[13.5px] font-bold text-white">{i + 1}</span>
             <DeptBadge department={d} size={22} />

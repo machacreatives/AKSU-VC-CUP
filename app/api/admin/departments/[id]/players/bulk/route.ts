@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "@vercel/postgres";
 import crypto from "crypto";
-import { requireAdmin } from "@/lib/require-admin";
+import { denyUnlessOwnTeam, requireAdmin } from "@/lib/require-admin";
 import { getDepartments } from "@/lib/db/queries";
 import {
   PLAYER_STATUSES,
@@ -42,6 +42,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
     const team = (await getDepartments()).find((d) => d.id === params.id);
     if (!team) return NextResponse.json({ error: "Team not found." }, { status: 404 });
+
+    const denied = denyUnlessOwnTeam(auth.user, params.id);
+    if (denied) return denied;
 
     if (rows.length === 0) {
       return NextResponse.json({ error: "Nothing to import." }, { status: 400 });

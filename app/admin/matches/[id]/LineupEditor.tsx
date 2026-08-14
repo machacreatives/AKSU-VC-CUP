@@ -303,12 +303,15 @@ export default function LineupEditor({
   home,
   away,
   locked,
+  ownDepartmentId = null,
   onSaved,
 }: {
   match: Match;
   home: Department;
   away: Department;
   locked: boolean;
+  /** Null for a superadmin, who owns both. */
+  ownDepartmentId?: string | null;
   onSaved: (message: string) => void;
 }) {
   const { data: allPlayers = [] } = usePlayers();
@@ -340,6 +343,13 @@ export default function LineupEditor({
         </span>
       </div>
 
+      {!locked && ownDepartmentId && (
+        <Banner tone="info">
+          You name your own eleven. The opposition&apos;s teamsheet is theirs to set, and the match
+          cannot kick off until both are in.
+        </Banner>
+      )}
+
       {locked && (
         <Banner tone="info">
           Teamsheets are fixed once a match starts, so the record of who was on the pitch cannot
@@ -354,7 +364,7 @@ export default function LineupEditor({
           side="home"
           team={home}
           squad={squadFor(match.home.departmentId)}
-          locked={locked}
+          locked={locked || (ownDepartmentId !== null && ownDepartmentId !== match.home.departmentId)}
           onSaved={onSaved}
         />
         <SideEditor
@@ -362,7 +372,7 @@ export default function LineupEditor({
           side="away"
           team={away}
           squad={squadFor(match.away.departmentId)}
-          locked={locked}
+          locked={locked || (ownDepartmentId !== null && ownDepartmentId !== match.away.departmentId)}
           onSaved={onSaved}
         />
       </div>

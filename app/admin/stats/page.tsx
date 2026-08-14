@@ -8,7 +8,7 @@ import { DataProvider } from "@/lib/data-context";
 import { Skeleton, SkeletonPageHeader, SkeletonRows, SkeletonScreen } from "@/components/Skeleton";
 import { useDepartments, usePlayers } from "@/lib/api";
 import { Player } from "@/lib/types";
-import { Banner, EmptyState, PageHeader } from "../ui";
+import { Banner, EmptyState, PageHeader, RequireSuperadmin } from "../ui";
 
 type MetricId = "scorers" | "assists" | "ratings" | "cards";
 
@@ -19,7 +19,7 @@ const metricTabs: { id: MetricId; label: string }[] = [
   { id: "cards", label: "Cards" },
 ];
 
-export default function AdminStatsPage() {
+function AdminStatsPage() {
   const [tab, setTab] = useState<MetricId>("scorers");
   const teamsQuery = useDepartments();
   const playersQuery = usePlayers();
@@ -113,5 +113,15 @@ export default function AdminStatsPage() {
         </DataProvider>
       )}
     </div>
+  );
+}
+
+// Fixtures, groups, tables and the team list belong to whoever runs the
+// tournament. A team admin who reaches this URL gets an explanation.
+export default function Guarded() {
+  return (
+    <RequireSuperadmin>
+      <AdminStatsPage />
+    </RequireSuperadmin>
   );
 }

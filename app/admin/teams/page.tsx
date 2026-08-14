@@ -16,21 +16,11 @@ import {
   groupsForCampus,
 } from "@/lib/types";
 import { Skeleton, SkeletonPageHeader, SkeletonRows, SkeletonScreen } from "@/components/Skeleton";
-import {
-  Banner,
-  EmptyState,
-  Notice,
-  PageHeader,
-  btnDanger,
-  btnOutline,
-  btnPrimary,
-  btnSm,
-  useNotice,
-} from "../ui";
+import { Banner, EmptyState, Notice, PageHeader, RequireSuperadmin, btnDanger, btnOutline, btnPrimary, btnSm, useNotice } from "../ui";
 import TeamForm from "./TeamForm";
 import TeamCsvImport from "./TeamCsvImport";
 
-export default function TeamsPage() {
+function TeamsPage() {
   const confirm = useConfirm();
   const queryClient = useQueryClient();
   const teamsQuery = useDepartments();
@@ -292,5 +282,15 @@ export default function TeamsPage() {
         );
       })}
     </div>
+  );
+}
+
+// Fixtures, groups, tables and the team list belong to whoever runs the
+// tournament. A team admin who reaches this URL gets an explanation.
+export default function Guarded() {
+  return (
+    <RequireSuperadmin>
+      <TeamsPage />
+    </RequireSuperadmin>
   );
 }

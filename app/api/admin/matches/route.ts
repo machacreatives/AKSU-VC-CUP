@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
-import { requireAdmin } from "@/lib/require-admin";
+import { requireSuperadmin } from "@/lib/require-admin";
 import { deleteMatch, getDepartments, getGroups, getMatch, upsertMatch } from "@/lib/db/queries";
 import { formatKickoff, kickoffInputToIso } from "@/lib/kickoff";
 import { GroupId, MATCH_STAGES, Match, MatchStage, MatchStatus } from "@/lib/types";
@@ -42,7 +42,7 @@ function resolveKickoff(
 // is. Previously this cast the request body straight to Match and wrote it,
 // which meant a malformed payload became a malformed row.
 export async function POST(req: Request) {
-  const auth = await requireAdmin();
+  const auth = await requireSuperadmin();
   if (auth.response) return auth.response;
 
   try {
@@ -156,7 +156,7 @@ export async function POST(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  const auth = await requireAdmin();
+  const auth = await requireSuperadmin();
   if (auth.response) return auth.response;
 
   try {

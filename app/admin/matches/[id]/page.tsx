@@ -7,14 +7,14 @@ import { Department, MatchEvent, MatchEventType } from "@/lib/types";
 import DeptBadge from "@/components/DeptBadge";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { Skeleton, SkeletonRows, SkeletonScreen } from "@/components/Skeleton";
-import { queryKeys, useDepartments, useMatch } from "@/lib/api";
+import { queryKeys, useDepartments, useMatch, useMe } from "@/lib/api";
 import MatchStatsControls from "./MatchStatsControls";
 import LineupEditor from "./LineupEditor";
 import ManOfTheMatch from "./ManOfTheMatch";
 import MatchRatings from "./MatchRatings";
 import EventForm from "./EventForm";
 import ScoreControls from "../../ScoreControls";
-import { Banner, Notice, btnDanger, btnSm, useNotice } from "../../ui";
+import { Banner, EmptyState, Notice, btnDanger, btnSm, useNotice } from "../../ui";
 import { useQueryClient } from "@tanstack/react-query";
 
 const EVENT_STYLES: Record<MatchEventType, { label: string; className: string }> = {
@@ -43,6 +43,10 @@ export default function AdminMatchPage() {
 
   const match = matchQuery.data ?? null;
   const departments: Department[] = departmentsQuery.data ?? [];
+
+  const { data: me } = useMe();
+  const superadmin = me?.role === "SUPERADMIN";
+  const myTeam = me?.departmentId ?? null;
 
   const [localError, setLocalError] = useState("");
   const [notice, setNotice] = useNotice();
@@ -126,6 +130,34 @@ export default function AdminMatchPage() {
     return id === homeTeam.id ? homeTeam : awayTeam;
   }
 
+  // Which side, if any, this account owns. Null for a superadmin.
+  const ownDepartmentId = superadmin ? null : myTeam;
+  const ownSide: "home" | "away" | null =
+    superadmin || !myTeam
+      ? null
+      : myTeam === match.home.departmentId
+      ? "home"
+      : myTeam === match.away.departmentId
+      ? "away"
+      : null;
+  const inThisMatch = superadmin || ownSide !== null;
+
+  if (!inThisMatch) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-10 lg:px-6">
+        <EmptyState
+          title="Not one of your matches"
+          body="Your account manages your own team's fixtures. This one is between two other teams — you can follow it on the public site."
+          action={
+            <Link href="/admin" className="text-[13px] font-bold text-accent">
+              Back to your matches &rarr;
+            </Link>
+          }
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-5 lg:px-6 lg:py-7">
       <Link href="/admin" className="text-[13px] font-bold text-accent">
@@ -145,7 +177,10 @@ export default function AdminMatchPage() {
         </div>
 
         {/* The score belongs here as well as on the dashboard: this is the
-            screen open while the match is being watched. */}
+            screen open while the match is being watched. A team admin moves it
+            by recording goals instead — the scoreline follows from the events,
+            and typing your own is a bigger hole than logging your own goal. */}
+        {superadmin && (
         <div className="border-t border-line pt-3">
           <ScoreControls
             match={match}
@@ -163,6 +198,7 @@ export default function AdminMatchPage() {
             Recording a goal below moves this on its own — edit it here only to correct it.
           </p>
         </div>
+        )}
       </header>
 
       <Notice>{notice}</Notice>
@@ -174,6 +210,7 @@ export default function AdminMatchPage() {
         home={homeTeam}
         away={awayTeam}
         locked={Boolean(match.firstHalfStartedAt) || match.status !== "UPCOMING"}
+        ownDepartmentId={ownDepartmentId}
         onSaved={setNotice}
       />
 
@@ -183,6 +220,7 @@ export default function AdminMatchPage() {
           match={match}
           home={homeTeam}
           away={awayTeam}
+          ownDepartmentId={ownDepartmentId}
           onAdded={() => {
             load();
             setNotice("Event added.");
@@ -190,9 +228,9 @@ export default function AdminMatchPage() {
         />
       </section>
 
-      <MatchStatsControls match={match} home={homeTeam} away={awayTeam} />
+      <MatchStatsControls match={match} home={homeTeam} away={awayTeam} ownSide={ownSide} />
 
-      <ManOfTheMatch match={match} home={homeTeam} away={awayTeam} />
+      {superadmin && <ManOfTheMatch match={match} home={homeTeam} away={awayTeam} />}
 
       <MatchRatings match={match} home={homeTeam} away={awayTeam} />
 
@@ -231,12 +269,14 @@ export default function AdminMatchPage() {
                   {e.detail && <span className="text-white/70"> · {e.detail}</span>}
                   {!e.playerId && <span className="ml-1 text-[11.5px] text-gold">unlinked</span>}
                 </span>
-                <button
-                  onClick={() => e.id != null && removeEvent(e)}
-                  className={`${btnDanger} ${btnSm}`}
-                >
-                  Remove
-                </button>
+                {(superadmin || e.departmentId === myTeam) && (
+                  <button
+                    onClick={() => e.id != null && removeEvent(e)}
+                    className={`${btnDanger} ${btnSm}`}
+                  >
+                    Remove
+                  </button>
+                )}
               </div>
             );
           })}

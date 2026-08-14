@@ -16,21 +16,10 @@ import {
 import { Skeleton, SkeletonPageHeader, SkeletonScreen } from "@/components/Skeleton";
 import { queryKeys, useDepartments, useGroups } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  Banner,
-  EmptyState,
-  Notice,
-  PageHeader,
-  btnDanger,
-  btnOutline,
-  btnPrimary,
-  btnSm,
-  field,
-  useNotice,
-} from "../ui";
+import { Banner, EmptyState, Notice, PageHeader, RequireSuperadmin, btnDanger, btnOutline, btnPrimary, btnSm, field, useNotice } from "../ui";
 import GroupForm from "./GroupForm";
 
-export default function GroupsPage() {
+function GroupsPage() {
   const queryClient = useQueryClient();
   const confirm = useConfirm();
   const teamsQuery = useDepartments();
@@ -348,5 +337,15 @@ export default function GroupsPage() {
         page counts them from results.
       </Banner>
     </div>
+  );
+}
+
+// Fixtures, groups, tables and the team list belong to whoever runs the
+// tournament. A team admin who reaches this URL gets an explanation.
+export default function Guarded() {
+  return (
+    <RequireSuperadmin>
+      <GroupsPage />
+    </RequireSuperadmin>
   );
 }

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/require-admin";
+import { requireSuperadmin } from "@/lib/require-admin";
 import { getMatch, resetMatch } from "@/lib/db/queries";
 
 export const dynamic = "force-dynamic";
@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 // group, round, venue, kickoff) is kept, so the match can simply be played
 // again — use DELETE /api/admin/matches to remove the fixture entirely.
 export async function POST(_req: Request, { params }: { params: { id: string } }) {
-  const auth = await requireAdmin();
+  const auth = await requireSuperadmin();
   if (auth.response) return auth.response;
 
   try {

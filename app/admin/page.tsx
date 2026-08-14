@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Match, Department, MatchStatus } from "@/lib/types";
 import DeptBadge from "@/components/DeptBadge";
 import { useConfirm } from "@/components/ConfirmDialog";
-import { queryKeys, useDepartments, useMatches } from "@/lib/api";
+import { queryKeys, useDepartments, useMatches, useMe } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 import MatchClockControls from "./MatchClockControls";
 import ScoreControls from "./ScoreControls";
@@ -54,7 +54,17 @@ export default function AdminDashboard() {
   const matchesQuery = useMatches();
   const departmentsQuery = useDepartments();
 
-  const matches: Match[] = matchesQuery.data ?? [];
+  const { data: me } = useMe();
+  const superadmin = me?.role === "SUPERADMIN";
+  const myTeam = me?.departmentId ?? null;
+
+  const allMatches: Match[] = matchesQuery.data ?? [];
+  // A team admin sees the fixtures they are playing in and nothing else.
+  const matches = superadmin
+    ? allMatches
+    : allMatches.filter(
+        (m) => m.home.departmentId === myTeam || m.away.departmentId === myTeam
+      );
   const departments: Department[] = departmentsQuery.data ?? [];
   const loading = matchesQuery.isPending || departmentsQuery.isPending;
 
@@ -173,8 +183,13 @@ export default function AdminDashboard() {
     <div className="mx-auto max-w-5xl space-y-5 px-4 py-5 lg:px-6 lg:py-7">
       <PageHeader
         title="Matches"
-        subtitle="Run the clock, record the score and keep every fixture up to date."
+        subtitle={
+          superadmin
+            ? "Run the clock, record the score and keep every fixture up to date."
+            : "Your team's fixtures. Run the clock and record what happens."
+        }
         action={
+          superadmin &&
           !showNewMatch && (
             <button
               onClick={() => {
@@ -203,7 +218,14 @@ export default function AdminDashboard() {
         />
       )}
 
-      {matches.length === 0 && !error && !showNewMatch && (
+      {matches.length === 0 && !error && !showNewMatch && !superadmin && (
+        <EmptyState
+          title="No fixtures yet"
+          body="Your team has no matches scheduled. Fixtures are created by the tournament organisers."
+        />
+      )}
+
+      {matches.length === 0 && !error && !showNewMatch && superadmin && (
         <EmptyState
           title="No fixtures yet"
           body="Create the first fixture and it will appear here, on the public site and in the group tables."
@@ -279,6 +301,7 @@ export default function AdminDashboard() {
                 />
               </div>
 
+              {superadmin && (
               <div className="rounded-[8px] border border-line bg-surface2/50 p-2.5">
                 <ScoreControls
                   match={m}
@@ -294,25 +317,30 @@ export default function AdminDashboard() {
                   }}
                 />
               </div>
+              )}
 
               {/* Actions, as buttons. These used to be four differently coloured
                   bits of underlined text competing with the team names. */}
               <footer className="flex flex-wrap gap-2 border-t border-line pt-3">
                 <Link href={`/admin/matches/${m.id}`} className={`${btnPrimary} ${btnSm}`}>
-                  Events &amp; stats
+                  {superadmin ? "Events & stats" : "Teamsheet, events & stats"}
                 </Link>
-                <button onClick={() => setEditingId(m.id)} className={`${btnSecondary} ${btnSm}`}>
-                  Edit fixture
-                </button>
-                <button
-                  onClick={() => resetMatchCompletely(m)}
-                  className={`${btnOutline} ${btnSm} ml-auto`}
-                >
-                  Reset
-                </button>
-                <button onClick={() => removeMatch(m)} className={`${btnDanger} ${btnSm}`}>
-                  Delete
-                </button>
+                {superadmin && (
+                  <>
+                    <button onClick={() => setEditingId(m.id)} className={`${btnSecondary} ${btnSm}`}>
+                      Edit fixture
+                    </button>
+                    <button
+                      onClick={() => resetMatchCompletely(m)}
+                      className={`${btnOutline} ${btnSm} ml-auto`}
+                    >
+                      Reset
+                    </button>
+                    <button onClick={() => removeMatch(m)} className={`${btnDanger} ${btnSm}`}>
+                      Delete
+                    </button>
+                  </>
+                )}
               </footer>
             </article>
           );

@@ -267,6 +267,34 @@ ALTER TABLE matches ALTER COLUMN "group" DROP NOT NULL;
 -- this one -- it was NULL for every row and every leaderboard that read it was
 -- silently empty.
 ALTER TABLE players DROP COLUMN IF EXISTS rating;
+
+-- Administrator roles.
+--
+-- Every account used to be identical: anyone who could sign in could create
+-- fixtures, delete teams and remove other administrators. A team now gets its
+-- own administrator, scoped to that department alone.
+--
+-- The default is SUPERADMIN on purpose. Existing accounts predate the column,
+-- and quietly demoting them would lock the tournament out of its own dashboard.
+ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'SUPERADMIN';
+ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS department_id TEXT;
+
+ALTER TABLE admin_users DROP CONSTRAINT IF EXISTS admin_users_role_ck;
+ALTER TABLE admin_users ADD CONSTRAINT admin_users_role_ck
+  CHECK (role IN ('SUPERADMIN','TEAM_ADMIN'));
+
+-- A team admin without a team would be an account that can reach nothing.
+ALTER TABLE admin_users DROP CONSTRAINT IF EXISTS admin_users_team_ck;
+ALTER TABLE admin_users ADD CONSTRAINT admin_users_team_ck
+  CHECK (role <> 'TEAM_ADMIN' OR department_id IS NOT NULL);
+
+-- Deleting a team removes its administrator: the login has nothing left to
+-- administer. The delete confirmation on the Teams page says so.
+ALTER TABLE admin_users DROP CONSTRAINT IF EXISTS admin_users_department_fk;
+ALTER TABLE admin_users ADD CONSTRAINT admin_users_department_fk
+  FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE CASCADE;
+
+CREATE INDEX IF NOT EXISTS idx_admin_users_department ON admin_users(department_id);
 `;
 
 // Split for drivers that accept only one statement per call.

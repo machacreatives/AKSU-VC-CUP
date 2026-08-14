@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { sql } from "@vercel/postgres";
-import { requireAdmin } from "@/lib/require-admin";
+import { requireSuperadmin } from "@/lib/require-admin";
 import { deleteDepartment, getDepartments, getGroups, upsertDepartment } from "@/lib/db/queries";
 import { CAMPUSES, CAMPUS_LABELS, Campus, Department, GroupId } from "@/lib/types";
 
@@ -18,7 +18,7 @@ function slugify(value: string): string {
 }
 
 export async function POST(req: Request) {
-  const auth = await requireAdmin();
+  const auth = await requireSuperadmin();
   if (auth.response) return auth.response;
 
   try {
@@ -117,7 +117,7 @@ export async function POST(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  const auth = await requireAdmin();
+  const auth = await requireSuperadmin();
   if (auth.response) return auth.response;
 
   try {

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/require-admin";
+import { requireSuperadmin } from "@/lib/require-admin";
 import {
   countGroupUsage,
   deleteGroup,
@@ -23,7 +23,7 @@ function slugify(name: string) {
 }
 
 export async function POST(req: Request) {
-  const auth = await requireAdmin();
+  const auth = await requireSuperadmin();
   if (auth.response) return auth.response;
 
   try {
@@ -108,7 +108,7 @@ export async function POST(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  const auth = await requireAdmin();
+  const auth = await requireSuperadmin();
   if (auth.response) return auth.response;
 
   try {

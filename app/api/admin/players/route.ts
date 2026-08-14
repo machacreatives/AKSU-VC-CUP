@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "@vercel/postgres";
 import crypto from "crypto";
-import { requireAdmin } from "@/lib/require-admin";
+import { denyUnlessOwnTeam, requireAdmin } from "@/lib/require-admin";
 import { deletePlayer, getDepartments, setSquadRole, upsertPlayer } from "@/lib/db/queries";
 import {
   PLAYER_STATUSES,
@@ -38,6 +38,27 @@ export async function POST(req: Request) {
     const number = Number(body.number ?? existing?.number);
     const position = (body.position ?? existing?.position) as PlayerPosition;
     const departmentId = String(body.departmentId ?? existing?.departmentId ?? "");
+
+    // Editing an existing player accepted whatever departmentId the body sent
+    // while falling back to the stored one, so posting a player's id with a
+    // different team quietly moved them between squads. A move is a delete and
+    // a re-add, not a field edit.
+    if (existing && departmentId !== existing.departmentId) {
+      return NextResponse.json(
+        {
+          error:
+            "A player cannot be moved between teams by editing them. Remove them from this squad and add them to the other.",
+        },
+        { status: 400 }
+      );
+    }
+
+    // Both the team being written to and, on an edit, the team they are already
+    // in — otherwise a team admin could edit anybody by id.
+    const denied =
+      denyUnlessOwnTeam(auth.user, departmentId) ??
+      (existing ? denyUnlessOwnTeam(auth.user, existing.departmentId) : null);
+    if (denied) return denied;
     const squadRole = (body.squadRole ?? existing?.squadRole ?? "PLAYER") as SquadRole;
     const status = (body.status ?? existing?.status ?? "ACTIVE") as PlayerStatus;
 
@@ -106,6 +127,17 @@ export async function DELETE(req: Request) {
     if (typeof id !== "string" || !id) {
       return NextResponse.json({ error: "Missing player id." }, { status: 400 });
     }
+
+    // Deleting took a bare id with no team check at all, so any administrator
+    // could remove any player in the tournament.
+    const { rows: target } = await sql`
+      SELECT department_id AS "departmentId" FROM players WHERE id = ${id}
+    `;
+    if (target.length === 0) {
+      return NextResponse.json({ error: "Player not found." }, { status: 404 });
+    }
+    const denied = denyUnlessOwnTeam(auth.user, target[0].departmentId as string);
+    if (denied) return denied;
     await deletePlayer(id);
     return NextResponse.json({ ok: true });
   } catch (err) {

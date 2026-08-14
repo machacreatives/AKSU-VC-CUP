@@ -14,7 +14,7 @@ import {
   MatchStage,
   STAGE_LABELS,
 } from "@/lib/types";
-import { Banner, EmptyState, Notice, PageHeader, btnOutline, btnPrimary, btnSm, useNotice } from "../ui";
+import { Banner, EmptyState, Notice, PageHeader, RequireSuperadmin, btnOutline, btnPrimary, btnSm, useNotice } from "../ui";
 import MatchForm from "../MatchForm";
 
 const STATUS_STYLES: Record<string, string> = {
@@ -33,7 +33,7 @@ const STATUS_STYLES: Record<string, string> = {
  * does give is the group winners alongside, so whoever is drawing the bracket
  * can see who qualified without leaving the page.
  */
-export default function AdminKnockoutPage() {
+function AdminKnockoutPage() {
   const matchesQuery = useMatches();
   const teamsQuery = useDepartments();
 
@@ -213,5 +213,15 @@ export default function AdminKnockoutPage() {
         its match page.
       </Banner>
     </div>
+  );
+}
+
+// Fixtures, groups, tables and the team list belong to whoever runs the
+// tournament. A team admin who reaches this URL gets an explanation.
+export default function Guarded() {
+  return (
+    <RequireSuperadmin>
+      <AdminKnockoutPage />
+    </RequireSuperadmin>
   );
 }

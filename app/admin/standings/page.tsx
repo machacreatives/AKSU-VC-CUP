@@ -15,7 +15,7 @@ import {
   Match,
   groupsForCampus,
 } from "@/lib/types";
-import { Banner, EmptyState, PageHeader } from "../ui";
+import { Banner, EmptyState, PageHeader, RequireSuperadmin } from "../ui";
 
 /**
  * The group tables, exactly as the public site computes them.
@@ -25,7 +25,7 @@ import { Banner, EmptyState, PageHeader } from "../ui";
  * the fix is the result that produced it, so every row links back to the
  * matches it came from.
  */
-export default function AdminStandingsPage() {
+function AdminStandingsPage() {
   const matchesQuery = useMatches();
   const teamsQuery = useDepartments();
   const groupsQuery = useGroups();
@@ -142,5 +142,15 @@ export default function AdminStandingsPage() {
         .
       </Banner>
     </div>
+  );
+}
+
+// Fixtures, groups, tables and the team list belong to whoever runs the
+// tournament. A team admin who reaches this URL gets an explanation.
+export default function Guarded() {
+  return (
+    <RequireSuperadmin>
+      <AdminStandingsPage />
+    </RequireSuperadmin>
   );
 }
