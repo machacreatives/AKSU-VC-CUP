@@ -29,3 +29,50 @@ export async function requireAdmin(): Promise<
 
   return { user };
 }
+
+export function isSuperadmin(user: AdminUser): boolean {
+  return user.role === "SUPERADMIN";
+}
+
+/**
+ * For anything that belongs to the tournament rather than to one team:
+ * fixtures, groups, venues, man of the match, accounts, the schema.
+ *
+ * The role is read from the database row on every call, not from the session
+ * cookie — the cookie lives for 12 hours, so a role baked into it would keep
+ * working for half a day after the account was demoted.
+ */
+export async function requireSuperadmin(): Promise<
+  { user: AdminUser; response?: never } | { user?: never; response: NextResponse }
+> {
+  const auth = await requireAdmin();
+  if (auth.response) return auth;
+
+  if (!isSuperadmin(auth.user)) {
+    return {
+      response: NextResponse.json(
+        { error: "This is only available to a superadmin." },
+        { status: 403 }
+      ),
+    };
+  }
+  return { user: auth.user };
+}
+
+/**
+ * Guard for anything owned by a specific team. Returns a response to send, or
+ * null to carry on.
+ *
+ * Deliberately a check the caller has to place rather than a wrapper: which
+ * department a request belongs to differs per route — a body field on events, a
+ * side resolved from the match on lineups, a URL segment on the bulk squad
+ * import — so there is nothing uniform to hoist.
+ */
+export function denyUnlessOwnTeam(user: AdminUser, departmentId: string): NextResponse | null {
+  if (isSuperadmin(user)) return null;
+  if (user.departmentId && user.departmentId === departmentId) return null;
+  return NextResponse.json(
+    { error: "You can only make changes for your own team." },
+    { status: 403 }
+  );
+}

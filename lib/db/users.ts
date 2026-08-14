@@ -2,11 +2,17 @@ import { sql } from "@vercel/postgres";
 import { unstable_noStore as noStore } from "next/cache";
 import crypto from "crypto";
 import { hashPassword } from "@/lib/password";
+import type { AdminRole } from "@/lib/types";
+
+export type { AdminRole };
 
 export type AdminUser = {
   id: string;
   username: string;
   displayName: string | null;
+  role: AdminRole;
+  /** The team a TEAM_ADMIN belongs to. Always null for a SUPERADMIN. */
+  departmentId: string | null;
   createdAt: string;
   lastLoginAt: string | null;
 };
@@ -14,6 +20,7 @@ export type AdminUser = {
 type AdminUserWithHash = AdminUser & { passwordHash: string };
 
 const SELECT_FIELDS = `id, username, display_name AS "displayName",
+       role, department_id AS "departmentId",
        created_at AS "createdAt", last_login_at AS "lastLoginAt"`;
 
 export async function countAdminUsers(): Promise<number> {
@@ -53,17 +60,77 @@ export async function getAdminUserByUsername(
 export async function createAdminUser(
   username: string,
   password: string,
-  displayName?: string
+  displayName?: string,
+  role: AdminRole = "SUPERADMIN",
+  departmentId: string | null = null
 ): Promise<AdminUser> {
   const id = crypto.randomUUID();
   const passwordHash = await hashPassword(password);
   const { rows } = await sql.query(
-    `INSERT INTO admin_users (id, username, password_hash, display_name)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO admin_users (id, username, password_hash, display_name, role, department_id)
+     VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING ${SELECT_FIELDS}`,
-    [id, username.trim(), passwordHash, displayName?.trim() || null]
+    [
+      id,
+      username.trim(),
+      passwordHash,
+      displayName?.trim() || null,
+      role,
+      role === "TEAM_ADMIN" ? departmentId : null,
+    ]
   );
   return rows[0] as AdminUser;
+}
+
+/**
+ * Change an account's role, team or display name.
+ *
+ * Clearing department_id when promoting to SUPERADMIN is not tidiness — the
+ * CHECK constraint allows a team on a superadmin, and leaving one behind would
+ * make "which team is this account scoped to" ambiguous for anything reading
+ * the row later.
+ */
+export async function updateAdminUser(
+  id: string,
+  patch: { role: AdminRole; departmentId: string | null; displayName?: string | null }
+): Promise<AdminUser | null> {
+  const { rows } = await sql.query(
+    `UPDATE admin_users
+     SET role = $2,
+         department_id = $3,
+         display_name = COALESCE($4, display_name)
+     WHERE id = $1
+     RETURNING ${SELECT_FIELDS}`,
+    [
+      id,
+      patch.role,
+      patch.role === "TEAM_ADMIN" ? patch.departmentId : null,
+      patch.displayName === undefined ? null : patch.displayName,
+    ]
+  );
+  return (rows[0] as AdminUser) ?? null;
+}
+
+/**
+ * How many superadmins exist. The tournament needs at least one at all times:
+ * an instance with only team admins has nobody who can create a fixture,
+ * manage groups, or make somebody a superadmin again.
+ */
+export async function countSuperadmins(): Promise<number> {
+  noStore();
+  const { rows } = await sql`
+    SELECT COUNT(*)::int AS n FROM admin_users WHERE role = 'SUPERADMIN'
+  `;
+  return rows[0].n as number;
+}
+
+/** Team ids that already have an administrator, for the Teams page marker. */
+export async function departmentsWithAdmins(): Promise<string[]> {
+  noStore();
+  const { rows } = await sql`
+    SELECT DISTINCT department_id FROM admin_users WHERE department_id IS NOT NULL
+  `;
+  return rows.map((r) => r.department_id as string);
 }
 
 export async function setAdminPassword(id: string, password: string): Promise<void> {

@@ -6,7 +6,7 @@ import {
   useQueryClient,
   type UseQueryOptions,
 } from "@tanstack/react-query";
-import { Department, Group, Match, Player, Venue } from "@/lib/types";
+import { AdminRole, Department, Group, Match, Player, Venue } from "@/lib/types";
 
 // Every client-side read goes through here, so caching, keys and invalidation
 // live in one place rather than being re-implemented per page.
@@ -18,6 +18,7 @@ export const queryKeys = {
   match: (id: string) => ["matches", id] as const,
   groups: ["groups"] as const,
   venues: ["venues"] as const,
+  me: ["admin", "me"] as const,
   adminUsers: ["admin", "users"] as const,
 };
 
@@ -74,6 +75,36 @@ export function usePlayers(options?: Partial<UseQueryOptions<Player[], Error>>) 
     refetchInterval: 60_000,
     ...options,
   });
+}
+
+export type Me = {
+  id: string;
+  username: string;
+  displayName: string | null;
+  role: AdminRole;
+  departmentId: string | null;
+};
+
+/**
+ * The signed-in administrator.
+ *
+ * Drives what the admin interface offers. `retry: false` because a 401 here
+ * means "not signed in", which no amount of retrying fixes.
+ */
+export function useMe(options?: Partial<UseQueryOptions<Me, Error>>) {
+  return useQuery({
+    queryKey: queryKeys.me,
+    queryFn: () => getJson<Me>("/api/admin/me"),
+    staleTime: 60_000,
+    retry: false,
+    ...options,
+  });
+}
+
+/** Convenience for the common branch. Undefined while the query is in flight. */
+export function useIsSuperadmin(): boolean | undefined {
+  const { data } = useMe();
+  return data ? data.role === "SUPERADMIN" : undefined;
 }
 
 export function useGroups(options?: Partial<UseQueryOptions<Group[], Error>>) {

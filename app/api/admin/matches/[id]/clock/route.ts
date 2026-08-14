@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { sql } from "@vercel/postgres";
-import { requireAdmin } from "@/lib/require-admin";
+import { denyUnlessOwnTeam, requireAdmin } from "@/lib/require-admin";
 import { getMatch, lineupsReady } from "@/lib/db/queries";
 
 export const dynamic = "force-dynamic";
@@ -29,14 +29,26 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const action = body.action as Action;
     const id = params.id;
 
+    // Either side's administrator may run the clock for a match they are in —
+    // whoever is at the ground. Not for anybody else's match.
+    const owned = await getMatch(id);
+    if (!owned) return NextResponse.json({ error: "Match not found." }, { status: 404 });
+    const inThisMatch =
+      denyUnlessOwnTeam(auth.user, owned.home.departmentId) === null ||
+      denyUnlessOwnTeam(auth.user, owned.away.departmentId) === null;
+    if (!inThisMatch) {
+      return NextResponse.json(
+        { error: "You can only run the clock for your own team's matches." },
+        { status: 403 }
+      );
+    }
+
     switch (action) {
       case "start-first-half": {
         // No kickoff without a teamsheet. Enforced here and not only in the
         // dashboard, so a stale page cannot start a match that has no lineup —
         // and once it is running the public Lineups tab has something to show.
-        const match = await getMatch(id);
-        if (!match) return NextResponse.json({ error: "Match not found." }, { status: 404 });
-
+        const match = owned;
         if (!lineupsReady(match)) {
           const missing = [
             (match.home.startingXI?.length ?? 0) !== 11 ? "the home side" : "",

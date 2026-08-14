@@ -23,10 +23,13 @@ export default function MatchStatsControls({
   match,
   home,
   away,
+  ownSide = null,
 }: {
   match: Match;
   home: Department;
   away: Department;
+  /** Null for a superadmin, who edits both sides and the possession split. */
+  ownSide?: "home" | "away" | null;
 }) {
   const queryClient = useQueryClient();
   const confirm = useConfirm();
@@ -73,10 +76,13 @@ export default function MatchStatsControls({
   async function save(h: TeamMatchStats, a: TeamMatchStats) {
     setStatus("saving");
     setError("");
+    // A team admin sends only their own side; the server merges it into what
+    // is stored rather than replacing both, and keeps the possession split.
+    const payload = ownSide === "home" ? { home: h } : ownSide === "away" ? { away: a } : { home: h, away: a };
     const res = await fetch(`/api/admin/matches/${match.id}/stats`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ home: h, away: a }),
+      body: JSON.stringify(payload),
     });
     const body = await res.json().catch(() => ({}));
 
@@ -141,12 +147,20 @@ export default function MatchStatsControls({
         <span className="text-[12px] text-white">
           {status === "saving" ? "Saving…" : status === "saved" ? "Saved" : "Saves as you tap"}
         </span>
-        <button onClick={clearStats} className={`${btnOutline} ml-auto py-1 text-[12px]`}>
-          Clear
-        </button>
+        {!ownSide && (
+          <button onClick={clearStats} className={`${btnOutline} ml-auto py-1 text-[12px]`}>
+            Clear
+          </button>
+        )}
       </div>
 
       {error && <Banner tone="error">{error}</Banner>}
+      {ownSide && (
+        <Banner tone="info">
+          You record your own side&apos;s numbers. Possession is one figure shared by both teams, so
+          it stays with the organisers.
+        </Banner>
+      )}
       {onTargetTooHigh && (
         <Banner tone="info">Shots on target is higher than total shots — worth a second look.</Banner>
       )}
@@ -174,7 +188,8 @@ export default function MatchStatsControls({
             max={100}
             value={homeStats.possession}
             onChange={(e) => setPossession(Number(e.target.value))}
-            className="h-1.5 min-w-0 flex-1 cursor-pointer appearance-none rounded-full bg-surface3 accent-accent"
+            disabled={ownSide !== null}
+            className="h-1.5 min-w-0 flex-1 appearance-none rounded-full bg-surface3 accent-accent enabled:cursor-pointer disabled:opacity-50"
             aria-label="Home possession percentage"
           />
           <span className="tabular w-12 text-right text-[16px] font-extrabold text-white">
@@ -185,7 +200,7 @@ export default function MatchStatsControls({
         {COUNTERS.map(({ key, label }) => (
           <div key={key} className="flex items-center gap-2 border-t border-line pt-3">
             <div className="flex items-center gap-1.5">
-              <button className={stepBtn} onClick={() => bump("home", key, -1)} aria-label={`${home.shortName} ${label} minus`}>
+              <button className={stepBtn} disabled={ownSide === "away"} onClick={() => bump("home", key, -1)} aria-label={`${home.shortName} ${label} minus`}>
                 −
               </button>
               <input
@@ -197,10 +212,11 @@ export default function MatchStatsControls({
                   dirty.current = true;
                   setHomeStats((s) => ({ ...s, [key]: Math.max(0, Number(e.target.value) || 0) }));
                 }}
-                className={`${field} w-14 text-center`}
+                disabled={ownSide === "away"}
+                className={`${field} w-14 text-center disabled:opacity-50`}
                 aria-label={`${home.shortName} ${label}`}
               />
-              <button className={stepBtn} onClick={() => bump("home", key, 1)} aria-label={`${home.shortName} ${label} plus`}>
+              <button className={stepBtn} disabled={ownSide === "away"} onClick={() => bump("home", key, 1)} aria-label={`${home.shortName} ${label} plus`}>
                 +
               </button>
             </div>
@@ -210,7 +226,7 @@ export default function MatchStatsControls({
             </span>
 
             <div className="flex items-center gap-1.5">
-              <button className={stepBtn} onClick={() => bump("away", key, -1)} aria-label={`${away.shortName} ${label} minus`}>
+              <button className={stepBtn} disabled={ownSide === "home"} onClick={() => bump("away", key, -1)} aria-label={`${away.shortName} ${label} minus`}>
                 −
               </button>
               <input
@@ -222,10 +238,11 @@ export default function MatchStatsControls({
                   dirty.current = true;
                   setAwayStats((s) => ({ ...s, [key]: Math.max(0, Number(e.target.value) || 0) }));
                 }}
-                className={`${field} w-14 text-center`}
+                disabled={ownSide === "home"}
+                className={`${field} w-14 text-center disabled:opacity-50`}
                 aria-label={`${away.shortName} ${label}`}
               />
-              <button className={stepBtn} onClick={() => bump("away", key, 1)} aria-label={`${away.shortName} ${label} plus`}>
+              <button className={stepBtn} disabled={ownSide === "home"} onClick={() => bump("away", key, 1)} aria-label={`${away.shortName} ${label} plus`}>
                 +
               </button>
             </div>

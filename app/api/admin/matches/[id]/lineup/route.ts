@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { sql } from "@vercel/postgres";
-import { requireAdmin } from "@/lib/require-admin";
+import { denyUnlessOwnTeam, requireAdmin } from "@/lib/require-admin";
 import { getMatch, lineupsLocked, setMatchLineup } from "@/lib/db/queries";
 import { isValidFormation, rowsFromFormation } from "@/lib/formation";
 
@@ -33,6 +33,11 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const side: "home" | "away" | null =
       body.side === "home" || body.side === "away" ? body.side : null;
     if (!side) return NextResponse.json({ error: "Side must be home or away." }, { status: 400 });
+
+    // The caller names a side, not a team, so the department has to be resolved
+    // from the match before it can be checked against who is asking.
+    const denied = denyUnlessOwnTeam(auth.user, match[side].departmentId);
+    if (denied) return denied;
 
     const formation = String(body.formation ?? "").trim();
     if (!isValidFormation(formation)) {

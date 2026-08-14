@@ -3,9 +3,14 @@
 import { useState } from "react";
 import { Banner, Notice, PageHeader, btnPrimary, useNotice } from "../ui";
 import AccountSection from "../AccountSection";
+import PasswordSection from "../PasswordSection";
 import VenueSection from "../VenueSection";
+import { useMe } from "@/lib/api";
 
 export default function SettingsPage() {
+  const { data: me } = useMe();
+  const superadmin = me?.role === "SUPERADMIN";
+
   const [initialising, setInitialising] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useNotice();
@@ -29,15 +34,21 @@ export default function SettingsPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-5 px-4 py-5 lg:px-6 lg:py-7">
-      <PageHeader title="Settings" subtitle="Administrators, venues and database." />
+      <PageHeader
+        title="Settings"
+        subtitle={superadmin ? "Administrators, venues and database." : "Your account."}
+      />
 
       {error && <Banner tone="error">{error}</Banner>}
       <Notice>{notice}</Notice>
 
-      <AccountSection />
+      <PasswordSection />
 
-      <VenueSection />
+      {superadmin && <AccountSection />}
 
+      {superadmin && <VenueSection />}
+
+      {superadmin && (
       <section className="space-y-2 border-t border-line pt-4">
         <h2 className="px-1 text-[13px] font-bold uppercase tracking-wide text-white">Database</h2>
         <p className="text-[13.5px] text-white">
@@ -48,6 +59,7 @@ export default function SettingsPage() {
           {initialising ? "Updating…" : "Update database"}
         </button>
       </section>
+      )}
     </div>
   );
 }

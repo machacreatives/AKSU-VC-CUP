@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { sql } from "@vercel/postgres";
-import { requireAdmin } from "@/lib/require-admin";
+import { requireSuperadmin } from "@/lib/require-admin";
 import { getMatch, setManOfTheMatch } from "@/lib/db/queries";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
-  const auth = await requireAdmin();
+  const auth = await requireSuperadmin();
   if (auth.response) return auth.response;
 
   try {

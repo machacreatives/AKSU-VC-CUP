@@ -2,8 +2,11 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { queryKeys, useMe } from "@/lib/api";
+import { useQueryClient } from "@tanstack/react-query";
+import { ROLE_LABELS } from "@/lib/types";
 
-const links = [
+const SUPERADMIN_LINKS = [
   { href: "/admin", label: "Overview" },
   { href: "/admin/teams", label: "Teams" },
   { href: "/admin/table", label: "Groups" },
@@ -13,17 +16,33 @@ const links = [
   { href: "/admin/settings", label: "Settings" },
 ];
 
+// A team admin runs one team. Everything else in the tournament is on the
+// public site anyway, so there is nothing here for them to navigate to.
+const teamAdminLinks = (departmentId: string | null) => [
+  { href: "/admin", label: "Matches" },
+  { href: departmentId ? `/admin/teams/${departmentId}` : "/admin/teams", label: "My team" },
+  { href: "/admin/settings", label: "Account" },
+];
+
 // Login and setup are reached without a session, so they get no nav.
 const BARE_PAGES = ["/admin/login", "/admin/setup"];
 
 export default function AdminNav() {
   const pathname = usePathname();
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const { data: me } = useMe({ enabled: !BARE_PAGES.includes(pathname) });
 
   if (BARE_PAGES.includes(pathname)) return null;
 
+  const links =
+    me?.role === "TEAM_ADMIN" ? teamAdminLinks(me.departmentId) : SUPERADMIN_LINKS;
+
   async function logout() {
     await fetch("/api/admin/logout", { method: "POST" });
+    // Otherwise the next account to sign in on this browser inherits the
+    // previous one's cached role and sees a nav they cannot use.
+    queryClient.clear();
     router.push("/admin/login");
     router.refresh();
   }
@@ -52,6 +71,11 @@ export default function AdminNav() {
       </nav>
 
       <div className="flex items-center gap-2">
+        {me && (
+          <span className="hidden text-[12px] text-white/70 sm:inline">
+            {me.username} · {ROLE_LABELS[me.role]}
+          </span>
+        )}
         <Link
           href="/"
           className="rounded-full border border-line px-3 py-1.5 text-[12.5px] font-bold text-white hover:bg-surface2"

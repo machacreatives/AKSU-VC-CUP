@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { sql } from "@vercel/postgres";
-import { requireAdmin } from "@/lib/require-admin";
+import { denyUnlessOwnTeam, requireAdmin } from "@/lib/require-admin";
 import { addMatchEvent, deleteMatchEvent, getMatch } from "@/lib/db/queries";
 import { GOAL_TYPES, GoalType, MatchEventType } from "@/lib/types";
 
@@ -42,6 +42,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     if (departmentId !== match.home.departmentId && departmentId !== match.away.departmentId) {
       return NextResponse.json({ error: "That team is not in this match." }, { status: 400 });
     }
+    // A team admin records their own team's events and nobody else's.
+    const denied = denyUnlessOwnTeam(auth.user, departmentId);
+    if (denied) return denied;
 
     const player = body.playerId ? await findPlayer(String(body.playerId)) : null;
     if (!player) {
@@ -171,6 +174,21 @@ export async function DELETE(req: Request, { params }: { params: { id: string } 
     if (!Number.isInteger(eventId)) {
       return NextResponse.json({ error: "Missing event id." }, { status: 400 });
     }
+
+    // This used to delete whatever id it was handed, without checking the event
+    // belonged to this match at all — so any event in the tournament could be
+    // removed through any match's URL. Resolve it first, then check both that
+    // it is in this match and that it belongs to the caller's team.
+    const match = await getMatch(params.id);
+    if (!match) return NextResponse.json({ error: "Match not found." }, { status: 404 });
+
+    const event = match.events.find((e) => e.id === eventId);
+    if (!event) {
+      return NextResponse.json({ error: "That event is not in this match." }, { status: 404 });
+    }
+    const denied = denyUnlessOwnTeam(auth.user, event.departmentId);
+    if (denied) return denied;
+
     await deleteMatchEvent(eventId);
     return NextResponse.json({ ok: true, match: await getMatch(params.id) });
   } catch (err) {
