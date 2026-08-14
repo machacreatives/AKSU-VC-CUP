@@ -28,12 +28,14 @@ function SideEditor({
   side,
   team,
   squad,
+  locked,
   onSaved,
 }: {
   match: Match;
   side: "home" | "away";
   team: Department;
   squad: Player[];
+  locked: boolean;
   onSaved: (message: string) => void;
 }) {
   const queryClient = useQueryClient();
@@ -123,18 +125,29 @@ function SideEditor({
         >
           {isSet ? `XI set · ${stored.formation ?? DEFAULT_FORMATION}` : "No teamsheet"}
         </span>
-        <button onClick={() => setOpen((v) => !v)} className={`${btnOutline} ${btnSm} ml-auto`}>
-          {open ? "Close" : isSet ? "Edit" : "Set teamsheet"}
-        </button>
+        {locked ? (
+          <span className="ml-auto text-[11.5px] font-semibold text-white/60">Locked</span>
+        ) : (
+          <button onClick={() => setOpen((v) => !v)} className={`${btnOutline} ${btnSm} ml-auto`}>
+            {open ? "Close" : isSet ? "Edit" : "Set teamsheet"}
+          </button>
+        )}
       </div>
 
-      {squad.length === 0 && (
+      {locked && isSet && (
+        <p className="text-[12.5px] text-white/70">
+          {stored.formation} · {savedCount} named
+          {(stored.bench?.length ?? 0) > 0 ? ` · ${stored.bench!.length} on the bench` : ""}
+        </p>
+      )}
+
+      {squad.length === 0 && !locked && (
         <Banner tone="info">
           {team.name} has no squad yet, so there is nobody to pick. Add players under Teams first.
         </Banner>
       )}
 
-      {!open && isSet && (
+      {!open && isSet && !locked && (
         <p className="text-[12.5px] text-white/70">
           {(stored.bench?.length ?? 0) > 0
             ? `${stored.bench!.length} substitute${stored.bench!.length === 1 ? "" : "s"} named.`
@@ -144,7 +157,7 @@ function SideEditor({
         </p>
       )}
 
-      {open && squad.length > 0 && (
+      {open && !locked && squad.length > 0 && (
         <div className="space-y-3">
           <div className="flex flex-wrap items-end gap-3">
             <label className="space-y-1">
@@ -289,11 +302,13 @@ export default function LineupEditor({
   match,
   home,
   away,
+  locked,
   onSaved,
 }: {
   match: Match;
   home: Department;
   away: Department;
+  locked: boolean;
   onSaved: (message: string) => void;
 }) {
   const { data: allPlayers = [] } = usePlayers();
@@ -312,10 +327,26 @@ export default function LineupEditor({
     <section id="teamsheets" className="scroll-mt-4 space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="text-[13px] font-bold uppercase tracking-wide text-white">Teamsheets</h2>
-        <span className={`text-[12px] font-semibold ${ready ? "text-win" : "text-gold"}`}>
-          {ready ? "Both sides named — ready to kick off" : "Needed before kick-off"}
+        <span
+          className={`text-[12px] font-semibold ${
+            locked ? "text-white/60" : ready ? "text-win" : "text-gold"
+          }`}
+        >
+          {locked
+            ? "Locked — the match has kicked off"
+            : ready
+            ? "Both sides named — ready to kick off"
+            : "Needed before kick-off"}
         </span>
       </div>
+
+      {locked && (
+        <Banner tone="info">
+          Teamsheets are fixed once a match starts, so the record of who was on the pitch cannot
+          change under events already recorded. Use <strong>Reset clock</strong> on the dashboard if
+          the match was started by mistake.
+        </Banner>
+      )}
 
       <div className="grid gap-3 xl:grid-cols-2">
         <SideEditor
@@ -323,6 +354,7 @@ export default function LineupEditor({
           side="home"
           team={home}
           squad={squadFor(match.home.departmentId)}
+          locked={locked}
           onSaved={onSaved}
         />
         <SideEditor
@@ -330,6 +362,7 @@ export default function LineupEditor({
           side="away"
           team={away}
           squad={squadFor(match.away.departmentId)}
+          locked={locked}
           onSaved={onSaved}
         />
       </div>

@@ -119,6 +119,40 @@ export type Player = PlayerProfile & {
 
 export type MatchEventType = "GOAL" | "YELLOW" | "RED" | "SUB";
 
+/**
+ * How a goal was scored.
+ *
+ * Structured rather than left in the free-text `detail` field, because the
+ * lineup graphic marks a penalty and a free kick differently and nothing can
+ * reliably read "pen." or "Penalty!!" out of a note somebody typed.
+ */
+export type GoalType = "OPEN_PLAY" | "PENALTY" | "FREE_KICK";
+
+export const GOAL_TYPES: GoalType[] = ["OPEN_PLAY", "PENALTY", "FREE_KICK"];
+
+export const GOAL_TYPE_LABELS: Record<GoalType, string> = {
+  OPEN_PLAY: "Open play",
+  PENALTY: "Penalty",
+  FREE_KICK: "Free kick",
+};
+
+/** Where a fixture sits in the tournament. Only GROUP counts toward a table. */
+export type MatchStage = "GROUP" | "R16" | "QF" | "SF" | "THIRD" | "FINAL";
+
+export const MATCH_STAGES: MatchStage[] = ["GROUP", "R16", "QF", "SF", "THIRD", "FINAL"];
+
+export const STAGE_LABELS: Record<MatchStage, string> = {
+  GROUP: "Group stage",
+  R16: "Round of 16",
+  QF: "Quarter-final",
+  SF: "Semi-final",
+  THIRD: "Third place",
+  FINAL: "Final",
+};
+
+/** The bracket, in order, excluding the group stage. */
+export const KNOCKOUT_STAGES: MatchStage[] = ["R16", "QF", "SF", "THIRD", "FINAL"];
+
 export type MatchEvent = {
   id?: number;
   minute: number;
@@ -134,6 +168,8 @@ export type MatchEvent = {
   /** SUB only — the player coming on. `playerId` is the one going off. */
   subInPlayerId?: string;
   subInPlayerName?: string;
+  /** GOAL only. Absent on goals recorded before this was captured. */
+  goalType?: GoalType;
   detail?: string; // e.g. "Penalty"
 };
 
@@ -189,7 +225,11 @@ export type Match = {
   /** The actual scheduled instant, ISO-8601. Null on hand-typed legacy rows. */
   kickoffAt?: string | null;
   round: string; // e.g. "Matchday 3"
-  group: GroupId;
+  /** Null on a knockout tie, which belongs to the bracket rather than a group. */
+  group: GroupId | null;
+  stage: MatchStage;
+  /** Chosen by the admin once the match is done. */
+  manOfTheMatchId?: string | null;
   venue: string;
   home: MatchSide;
   away: MatchSide;

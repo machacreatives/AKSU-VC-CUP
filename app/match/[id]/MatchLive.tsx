@@ -6,7 +6,7 @@ import MatchDetailTabs from "@/components/MatchDetailTabs";
 import MatchGone from "@/components/MatchGone";
 import ScorersLine from "@/components/ScorersLine";
 import { isNotFound, useMatch } from "@/lib/api";
-import { Department, Match } from "@/lib/types";
+import { Department, Match, STAGE_LABELS } from "@/lib/types";
 
 const unknownDepartment = (id: string): Department => ({
   id,
@@ -59,7 +59,12 @@ export default function MatchLive({
     <div>
       <div className="border-b border-line px-4 py-6 lg:py-8">
         <div className="mx-auto mb-3 flex max-w-3xl items-center justify-center gap-2 text-[13px] font-semibold text-white lg:text-[14px]">
-          <span className="rounded-full bg-surface2 px-2 py-0.5 text-white">GROUP {match.group}</span>
+          {/* A knockout tie has no group, so it names its round instead. */}
+          <span className="rounded-full bg-surface2 px-2 py-0.5 text-white">
+            {match.stage && match.stage !== "GROUP"
+              ? STAGE_LABELS[match.stage].toUpperCase()
+              : `GROUP ${match.group ?? "—"}`}
+          </span>
           <span>{match.round}</span>
           <span>&middot;</span>
           <span>{match.venue}</span>

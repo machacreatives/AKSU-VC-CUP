@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "@vercel/postgres";
 import { requireAdmin } from "@/lib/require-admin";
-import { getMatch, setMatchLineup } from "@/lib/db/queries";
+import { getMatch, lineupsLocked, setMatchLineup } from "@/lib/db/queries";
 import { isValidFormation, rowsFromFormation } from "@/lib/formation";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +15,19 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   try {
     const match = await getMatch(params.id);
     if (!match) return NextResponse.json({ error: "Match not found." }, { status: 404 });
+
+    // A teamsheet describes who started. Once the whistle has gone that is a
+    // record, not a plan — editing it would rewrite who was on the pitch when
+    // a goal was already scored.
+    if (lineupsLocked(match)) {
+      return NextResponse.json(
+        {
+          error:
+            "This match has already kicked off, so the teamsheets are locked. Reset the clock first if it was started by mistake.",
+        },
+        { status: 409 }
+      );
+    }
 
     const body = await req.json();
     const side: "home" | "away" | null =

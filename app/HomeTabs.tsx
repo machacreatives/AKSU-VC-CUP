@@ -185,7 +185,7 @@ export default function HomeTabs({
           </section>
         )}
 
-        {tab === "knockout" && <KnockoutBracket />}
+        {tab === "knockout" && <KnockoutBracket matches={matches} />}
 
         {tab === "scorers" && <StatList players={topScorers} metric="goals" />}
         {tab === "assists" && <StatList players={topAssisters} metric="assists" />}

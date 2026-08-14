@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { sql } from "@vercel/postgres";
 import { requireAdmin } from "@/lib/require-admin";
 import { addMatchEvent, deleteMatchEvent, getMatch } from "@/lib/db/queries";
-import { MatchEventType } from "@/lib/types";
+import { GOAL_TYPES, GoalType, MatchEventType } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -124,6 +124,21 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       return NextResponse.json({ error: "Pick the player coming on." }, { status: 400 });
     }
 
+    // How the goal was scored, so the lineup graphic can mark a penalty and a
+    // free kick differently. Defaults to open play rather than being required.
+    let goalType: GoalType | undefined;
+    if (body.goalType) {
+      if (type !== "GOAL") {
+        return NextResponse.json({ error: "Only a goal has a goal type." }, { status: 400 });
+      }
+      if (!GOAL_TYPES.includes(body.goalType)) {
+        return NextResponse.json({ error: "Unknown goal type." }, { status: 400 });
+      }
+      goalType = body.goalType as GoalType;
+    } else if (type === "GOAL") {
+      goalType = "OPEN_PLAY";
+    }
+
     await addMatchEvent(params.id, {
       minute,
       type,
@@ -134,6 +149,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       assistPlayerName: assist?.name,
       subInPlayerId: subIn?.id,
       subInPlayerName: subIn?.name,
+      goalType,
       detail: body.detail ? String(body.detail).trim() : undefined,
     });
 

@@ -1,10 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { Match } from "@/lib/types";
+import { Match, MatchStage } from "@/lib/types";
 import { useDepartment } from "@/lib/data-context";
 import DeptBadge from "./DeptBadge";
 import MatchClock from "./MatchClock";
+
+// The card badge is tiny, so the round is abbreviated rather than wrapped.
+const SHORT_STAGE: Record<MatchStage, string> = {
+  GROUP: "GRP",
+  R16: "R16",
+  QF: "QF",
+  SF: "SF",
+  THIRD: "3RD",
+  FINAL: "FINAL",
+};
 
 export default function MatchCard({ match }: { match: Match }) {
   const home = useDepartment(match.home.departmentId);
@@ -38,8 +48,11 @@ export default function MatchCard({ match }: { match: Match }) {
         ) : (
           <span className="text-[13px] font-bold text-white">FT</span>
         )}
+        {/* Group fixtures show their group; a knockout tie shows its round. */}
         <span className="rounded-[4px] bg-surface3 px-1.5 py-0.5 text-[10px] font-bold text-white">
-          GRP {match.group}
+          {match.stage && match.stage !== "GROUP"
+            ? SHORT_STAGE[match.stage]
+            : `GRP ${match.group ?? "—"}`}
         </span>
       </div>
 

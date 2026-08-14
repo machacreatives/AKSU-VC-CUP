@@ -3,7 +3,15 @@
 import { useEffect, useState } from "react";
 import { usePlayers } from "@/lib/api";
 import { computeClock } from "@/lib/match-clock";
-import { Department, Match, MatchEventType, Player } from "@/lib/types";
+import {
+  Department,
+  GOAL_TYPES,
+  GOAL_TYPE_LABELS,
+  GoalType,
+  Match,
+  MatchEventType,
+  Player,
+} from "@/lib/types";
 import { Banner, btnPrimary, field } from "../../ui";
 
 const TYPES: { id: MatchEventType; label: string }[] = [
@@ -38,6 +46,7 @@ export default function EventForm({
   const [deptId, setDeptId] = useState(match.home.departmentId);
   const [playerId, setPlayerId] = useState("");
   const [assistId, setAssistId] = useState("");
+  const [goalType, setGoalType] = useState<GoalType>("OPEN_PLAY");
   const [subInId, setSubInId] = useState("");
   const [detail, setDetail] = useState("");
   const [saving, setSaving] = useState(false);
@@ -116,6 +125,7 @@ export default function EventForm({
         departmentId: deptId,
         playerId,
         assistPlayerId: type === "GOAL" && assistId ? assistId : undefined,
+        goalType: type === "GOAL" ? goalType : undefined,
         subInPlayerId: type === "SUB" && subInId ? subInId : undefined,
         detail: detail || undefined,
       }),
@@ -129,6 +139,7 @@ export default function EventForm({
     setPlayerId("");
     setAssistId("");
     setSubInId("");
+    setGoalType("OPEN_PLAY");
     setDetail("");
     setManualMinute(null);
     onAdded();
@@ -240,6 +251,28 @@ export default function EventForm({
               {assistCandidates.map((p) => (
                 <option key={p.id} value={p.id}>
                   #{p.number} {p.name} ({p.position})
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        {/* Recorded as a value rather than typed into the detail note, because
+            the lineup graphic marks a penalty and a free kick with their own
+            symbol and cannot read prose. */}
+        {type === "GOAL" && (
+          <label className="space-y-1">
+            <span className="block text-[11.5px] font-semibold uppercase tracking-wide text-white">
+              How
+            </span>
+            <select
+              value={goalType}
+              onChange={(e) => setGoalType(e.target.value as GoalType)}
+              className={`${field} w-32`}
+            >
+              {GOAL_TYPES.map((g) => (
+                <option key={g} value={g}>
+                  {GOAL_TYPE_LABELS[g]}
                 </option>
               ))}
             </select>

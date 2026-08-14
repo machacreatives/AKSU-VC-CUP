@@ -5,7 +5,15 @@ import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys, useGroups, useVenues } from "@/lib/api";
 import { isoToKickoffInput } from "@/lib/kickoff";
-import { Department, GroupId, Match, sortGroups } from "@/lib/types";
+import {
+  Department,
+  GroupId,
+  MATCH_STAGES,
+  Match,
+  MatchStage,
+  STAGE_LABELS,
+  sortGroups,
+} from "@/lib/types";
 import { Banner, btnOutline, btnPrimary, fieldFull, label } from "./ui";
 
 /**
@@ -37,6 +45,7 @@ export default function MatchForm({
   const [homeId, setHomeId] = useState(match?.home.departmentId ?? "");
   const [awayId, setAwayId] = useState(match?.away.departmentId ?? "");
   const [group, setGroup] = useState<GroupId>(match?.group ?? "");
+  const [stage, setStage] = useState<MatchStage>(match?.stage ?? "GROUP");
   const [round, setRound] = useState(match?.round ?? "");
   const [venue, setVenue] = useState(match?.venue ?? "");
   const [kickoffLocal, setKickoffLocal] = useState(isoToKickoffInput(match?.kickoffAt));
@@ -49,13 +58,15 @@ export default function MatchForm({
     ? [{ id: "__current", name: venue }, ...venues]
     : venues;
 
-  // Picking the home team suggests its group, since fixtures are almost always
-  // within a group. Still editable for knockout ties.
+  // Picking the home team suggests its group, since group fixtures are almost
+  // always within one. A knockout tie has no group at all.
   function chooseHome(id: string) {
     setHomeId(id);
     const dept = departments.find((d) => d.id === id);
-    if (dept) setGroup(dept.group);
+    if (dept && stage === "GROUP") setGroup(dept.group);
   }
+
+  const isGroupStage = stage === "GROUP";
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -63,7 +74,7 @@ export default function MatchForm({
 
     if (!homeId || !awayId) return setError("Pick both teams.");
     if (homeId === awayId) return setError("A team cannot play itself.");
-    if (!group) return setError("Pick the group.");
+    if (isGroupStage && !group) return setError("Pick the group.");
     if (!kickoffLocal) return setError("Pick the kickoff date and time.");
     if (!venue) return setError("Pick the venue.");
 
@@ -75,7 +86,8 @@ export default function MatchForm({
         id: match?.id,
         home: { departmentId: homeId, score: match?.home.score ?? 0 },
         away: { departmentId: awayId, score: match?.away.score ?? 0 },
-        group,
+        group: isGroupStage ? group : null,
+        stage,
         round,
         venue,
         kickoffLocal,
@@ -131,16 +143,42 @@ export default function MatchForm({
         </div>
 
         <div className="space-y-1">
-          <span className={label}>Group</span>
-          <select value={group} onChange={(e) => setGroup(e.target.value)} className={fieldFull}>
-            <option value="">Select…</option>
-            {groups.map((g) => (
-              <option key={g.id} value={g.id}>
-                Group {g.name}
+          <span className={label}>Stage</span>
+          <select
+            value={stage}
+            onChange={(e) => setStage(e.target.value as MatchStage)}
+            className={fieldFull}
+          >
+            {MATCH_STAGES.map((s) => (
+              <option key={s} value={s}>
+                {STAGE_LABELS[s]}
               </option>
             ))}
           </select>
         </div>
+
+        {/* A knockout tie belongs to the bracket, not a table, so the group
+            picker is not just optional there — it is meaningless. */}
+        {isGroupStage ? (
+          <div className="space-y-1">
+            <span className={label}>Group</span>
+            <select value={group} onChange={(e) => setGroup(e.target.value)} className={fieldFull}>
+              <option value="">Select…</option>
+              {groups.map((g) => (
+                <option key={g.id} value={g.id}>
+                  Group {g.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <div className="space-y-1">
+            <span className={label}>Group</span>
+            <p className={`${fieldFull} text-white/60`}>
+              Not applicable — knockout ties sit in the bracket.
+            </p>
+          </div>
+        )}
 
         <div className="space-y-1">
           <span className={label}>Round</span>

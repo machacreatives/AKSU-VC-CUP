@@ -232,6 +232,35 @@ ALTER TABLE departments ADD CONSTRAINT departments_group_fk
 ALTER TABLE matches DROP CONSTRAINT IF EXISTS matches_group_fk;
 ALTER TABLE matches ADD CONSTRAINT matches_group_fk
   FOREIGN KEY ("group") REFERENCES groups(id);
+
+-- How a goal was scored. Needed because the match graphic marks a penalty and
+-- a free kick differently from a goal in open play, and "Penalty" typed into
+-- the free-text detail field is not something a renderer can read.
+ALTER TABLE match_events ADD COLUMN IF NOT EXISTS goal_type TEXT;
+
+ALTER TABLE match_events DROP CONSTRAINT IF EXISTS match_events_goal_type_ck;
+ALTER TABLE match_events ADD CONSTRAINT match_events_goal_type_ck
+  CHECK (goal_type IS NULL OR (type = 'GOAL' AND goal_type IN ('OPEN_PLAY','PENALTY','FREE_KICK')));
+
+-- Man of the match. ON DELETE SET NULL rather than CASCADE: removing a player
+-- from a squad should not delete the match they were once best in.
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS man_of_the_match_id TEXT;
+
+ALTER TABLE matches DROP CONSTRAINT IF EXISTS matches_motm_fk;
+ALTER TABLE matches ADD CONSTRAINT matches_motm_fk
+  FOREIGN KEY (man_of_the_match_id) REFERENCES players(id) ON DELETE SET NULL;
+
+-- Knockout. Group fixtures keep counting toward the table, everything else is
+-- a tie in the bracket, so a cup result can no longer pollute a group table.
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS stage TEXT NOT NULL DEFAULT 'GROUP';
+
+ALTER TABLE matches DROP CONSTRAINT IF EXISTS matches_stage_ck;
+ALTER TABLE matches ADD CONSTRAINT matches_stage_ck
+  CHECK (stage IN ('GROUP','R16','QF','SF','THIRD','FINAL'));
+
+-- A knockout tie belongs to no group, so the column has to allow it. The
+-- foreign key still holds for every row that names one.
+ALTER TABLE matches ALTER COLUMN "group" DROP NOT NULL;
 `;
 
 // Split for drivers that accept only one statement per call.

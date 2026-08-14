@@ -30,8 +30,9 @@ export default function MatchDetailTabs({ match }: { match: Match }) {
         {/* The pitch is portrait (68:100), so on a wide screen it must be
             capped and centred or it becomes absurdly tall. */}
         {tab === "lineups" && hasLineups && (
-          <div className="mx-auto w-full sm:max-w-md">
+          <div className="mx-auto w-full">
           <FormationPitch
+            match={match}
             home={home}
             away={away}
             homeXI={match.home.startingXI!}
