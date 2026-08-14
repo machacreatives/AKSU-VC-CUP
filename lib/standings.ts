@@ -43,3 +43,19 @@ export function computeStandings(matches: Match[], departments: Department[]): S
 
   return Array.from(table.values());
 }
+
+/**
+ * League order: points, then goal difference, then goals scored.
+ *
+ * Sorting was written out by hand wherever a table was rendered, and the admin
+ * view has to agree with the public one exactly — a table that ranks two teams
+ * differently in two places is worse than no table.
+ */
+export function sortStandings(rows: StandingsRow[]): StandingsRow[] {
+  return [...rows].sort(
+    (a, b) =>
+      b.points - a.points ||
+      b.goalsFor - b.goalsAgainst - (a.goalsFor - a.goalsAgainst) ||
+      b.goalsFor - a.goalsFor
+  );
+}

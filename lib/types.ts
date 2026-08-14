@@ -82,13 +82,24 @@ export type Player = PlayerProfile & {
   rating?: number;
 };
 
+export type MatchEventType = "GOAL" | "YELLOW" | "RED" | "SUB";
+
 export type MatchEvent = {
   id?: number;
   minute: number;
-  type: "GOAL" | "YELLOW" | "RED" | "SUB";
+  type: MatchEventType;
   departmentId: string;
+  /** The squad member this is recorded against. Absent only on legacy rows. */
+  playerId?: string;
+  /** Kept alongside the id so the timeline survives a player being deleted. */
   playerName: string;
-  detail?: string; // e.g. assist name, or "Pen"
+  /** GOAL only. */
+  assistPlayerId?: string;
+  assistPlayerName?: string;
+  /** SUB only — the player coming on. `playerId` is the one going off. */
+  subInPlayerId?: string;
+  subInPlayerName?: string;
+  detail?: string; // e.g. "Penalty"
 };
 
 export type TeamMatchStats = {
@@ -104,8 +115,16 @@ export type MatchSide = {
   score: number;
   formation?: string; // e.g. "4-2-3-1" — drives auto-layout, see lib/formation.ts
   startingXI?: string[]; // ordered playerIds: GK, then row by row, back to front
+  /** Named substitutes for this match — who the "coming on" picker offers. */
+  bench?: string[];
   captainId?: string;
   stats?: TeamMatchStats;
+};
+
+/** A ground a fixture can be played at. Managed under admin settings. */
+export type Venue = {
+  id: string;
+  name: string;
 };
 
 export type Match = {
@@ -123,7 +142,17 @@ export type Match = {
   /** Announced stoppage time, set by the admin. */
   firstHalfAddedMinutes: number;
   secondHalfAddedMinutes: number;
-  kickoff: string; // display string
+  /**
+   * Display text — what a viewer reads on the card.
+   *
+   * Derived from `kickoffAt` and written at save time rather than formatted in
+   * the browser, so the server and client render the same characters and there
+   * is no hydration mismatch from a viewer in another timezone. Fixtures
+   * created before the date picker existed keep whatever was typed.
+   */
+  kickoff: string;
+  /** The actual scheduled instant, ISO-8601. Null on hand-typed legacy rows. */
+  kickoffAt?: string | null;
   round: string; // e.g. "Matchday 3"
   group: GroupId;
   venue: string;

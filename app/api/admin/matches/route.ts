@@ -2,12 +2,42 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { requireAdmin } from "@/lib/require-admin";
 import { deleteMatch, getDepartments, getMatch, upsertMatch } from "@/lib/db/queries";
+import { formatKickoff, kickoffInputToIso } from "@/lib/kickoff";
 import { GroupId, Match, MatchStatus } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 const GROUPS: GroupId[] = ["A", "B", "C", "D"];
 const STATUSES: MatchStatus[] = ["UPCOMING", "LIVE", "HT", "FT"];
+
+/**
+ * Work out the scheduled instant and the text shown for it.
+ *
+ * `kickoffLocal` is what the date picker produces ("2026-08-16T15:00"). A
+ * fixture created before the picker existed has only free text and no instant,
+ * so an update that does not mention kickoff leaves both alone rather than
+ * blanking the text it cannot reconstruct.
+ */
+function resolveKickoff(
+  body: any,
+  existing: Match | null
+): { at: string | null; text: string; error?: string } {
+  const kept = { at: existing?.kickoffAt ?? null, text: existing?.kickoff ?? "TBC" };
+
+  if (body.kickoffLocal === undefined) {
+    // Nothing to change. A brand-new fixture still has to name a time.
+    if (!existing) return { at: null, text: "TBC", error: "Pick the kickoff date and time." };
+    return kept;
+  }
+
+  const raw = String(body.kickoffLocal ?? "").trim();
+  if (!raw) return { at: null, text: "TBC", error: "Pick the kickoff date and time." };
+
+  const at = kickoffInputToIso(raw);
+  if (!at) return { at: null, text: "TBC", error: "That kickoff date and time is not valid." };
+
+  return { at, text: formatKickoff(at) };
+}
 
 // POST creates a fixture when no `id` is supplied, and updates one when there
 // is. Previously this cast the request body straight to Match and wrote it,
@@ -54,6 +84,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid match status." }, { status: 400 });
     }
 
+    // Kickoff arrives as the raw value of a datetime-local input, read as
+    // tournament time. The display string is generated from it here rather than
+    // in the browser so every viewer sees the same text regardless of the
+    // timezone their device is set to.
+    const kickoff = resolveKickoff(body, existing);
+    if (kickoff.error) return NextResponse.json({ error: kickoff.error }, { status: 400 });
+
     const match: Match = {
       id: isUpdate ? body.id : crypto.randomUUID(),
       status,
@@ -64,7 +101,8 @@ export async function POST(req: Request) {
       secondHalfStartedAt: existing?.secondHalfStartedAt ?? null,
       firstHalfAddedMinutes: existing?.firstHalfAddedMinutes ?? 0,
       secondHalfAddedMinutes: existing?.secondHalfAddedMinutes ?? 0,
-      kickoff: (body.kickoff ?? existing?.kickoff ?? "TBC").toString().trim() || "TBC",
+      kickoff: kickoff.text,
+      kickoffAt: kickoff.at,
       round: (body.round ?? existing?.round ?? "").toString().trim(),
       group,
       venue: (body.venue ?? existing?.venue ?? "").toString().trim(),

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMatches, usePlayers } from "@/lib/api";
-import { computeStandings } from "@/lib/standings";
+import { computeStandings, sortStandings } from "@/lib/standings";
 import TabBar from "@/components/TabBar";
 import MatchCard from "@/components/MatchCard";
 import StandingsTable from "@/components/StandingsTable";
@@ -69,12 +69,9 @@ export default function HomeTabs({
   const finished = matches.filter((m) => m.status === "FT");
 
   function rowsForGroup(group: GroupId) {
-    return standings
-      .filter((row) => departments.find((d) => d.id === row.departmentId)?.group === group)
-      .sort(
-        (a, b) =>
-          b.points - a.points || b.goalsFor - b.goalsAgainst - (a.goalsFor - a.goalsAgainst)
-      );
+    return sortStandings(
+      standings.filter((row) => departments.find((d) => d.id === row.departmentId)?.group === group)
+    );
   }
 
   const topScorers = [...players].filter((p) => p.goals > 0).sort((a, b) => b.goals - a.goals);

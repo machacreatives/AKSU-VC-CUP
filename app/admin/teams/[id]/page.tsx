@@ -20,7 +20,16 @@ import {
   Department,
 } from "@/lib/types";
 import { Skeleton, SkeletonPageHeader, SkeletonRows, SkeletonScreen } from "@/components/Skeleton";
-import { Banner, EmptyState, PageHeader, btnOutline, btnPrimary, field } from "../../ui";
+import {
+  Banner,
+  EmptyState,
+  Notice,
+  PageHeader,
+  btnOutline,
+  btnPrimary,
+  field,
+  useNotice,
+} from "../../ui";
 import TeamForm from "../TeamForm";
 import CsvImport from "./CsvImport";
 
@@ -52,7 +61,7 @@ export default function TeamSquadPage() {
   const loading = teamsQuery.isPending || playersQuery.isPending;
 
   const [localError, setLocalError] = useState("");
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useNotice();
   const [editingTeam, setEditingTeam] = useState(false);
   const [importing, setImporting] = useState(false);
 
@@ -190,7 +199,7 @@ export default function TeamSquadPage() {
       />
 
       {error && <Banner tone="error">{error}</Banner>}
-      {notice && <Banner tone="success">{notice}</Banner>}
+      <Notice>{notice}</Notice>
 
       {editingTeam && (
         <TeamForm

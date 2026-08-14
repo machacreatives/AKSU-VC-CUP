@@ -1,6 +1,15 @@
 import { sql } from "@vercel/postgres";
 import { unstable_noStore as noStore } from "next/cache";
-import { Department, Match, MatchEvent, Player, PlayerProfile, StandingsRow } from "@/lib/types";
+import {
+  Department,
+  Match,
+  MatchEvent,
+  Player,
+  PlayerProfile,
+  StandingsRow,
+  TeamMatchStats,
+  Venue,
+} from "@/lib/types";
 import { computeStandings } from "@/lib/standings";
 
 // @vercel/postgres talks to Neon over HTTP, and Next.js patches global fetch
@@ -35,6 +44,38 @@ export async function upsertDepartment(d: Department) {
 
 export async function deleteDepartment(id: string) {
   await sql`DELETE FROM departments WHERE id = ${id}`;
+}
+
+// ---------- Venues ----------
+
+export async function getVenues(): Promise<Venue[]> {
+  freshRead();
+  const { rows } = await sql`SELECT id, name FROM venues ORDER BY name`;
+  return rows as Venue[];
+}
+
+export async function upsertVenue(v: Venue) {
+  await sql`
+    INSERT INTO venues (id, name) VALUES (${v.id}, ${v.name})
+    ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name
+  `;
+}
+
+/**
+ * Removing a ground from the list does not touch the fixtures played there —
+ * matches store the venue as text precisely so this is safe.
+ */
+export async function deleteVenue(id: string) {
+  await sql`DELETE FROM venues WHERE id = ${id}`;
+}
+
+/** How many fixtures name this ground, so the admin can be told before deleting. */
+export async function countMatchesAtVenue(name: string): Promise<number> {
+  freshRead();
+  const { rows } = await sql`
+    SELECT COUNT(*)::int AS count FROM matches WHERE LOWER(BTRIM(venue)) = LOWER(BTRIM(${name}))
+  `;
+  return (rows[0]?.count as number) ?? 0;
 }
 
 // ---------- Players ----------
@@ -110,6 +151,7 @@ function rowToMatchBase(row: any): Omit<Match, "events"> {
     firstHalfAddedMinutes: row.first_half_added_minutes ?? 0,
     secondHalfAddedMinutes: row.second_half_added_minutes ?? 0,
     kickoff: row.kickoff,
+    kickoffAt: row.kickoff_at ? new Date(row.kickoff_at).toISOString() : null,
     round: row.round,
     group: row.group,
     venue: row.venue,
@@ -118,6 +160,7 @@ function rowToMatchBase(row: any): Omit<Match, "events"> {
       score: row.home_score,
       formation: row.home_formation ?? undefined,
       startingXI: row.home_starting_xi ?? undefined,
+      bench: row.home_bench ?? undefined,
       captainId: row.home_captain_id ?? undefined,
       stats: row.home_stats ?? undefined,
     },
@@ -126,28 +169,43 @@ function rowToMatchBase(row: any): Omit<Match, "events"> {
       score: row.away_score,
       formation: row.away_formation ?? undefined,
       startingXI: row.away_starting_xi ?? undefined,
+      bench: row.away_bench ?? undefined,
       captainId: row.away_captain_id ?? undefined,
       stats: row.away_stats ?? undefined,
     },
   };
 }
 
+const EVENT_COLUMNS = `id, minute, type, department_id, player_id, player_name,
+           assist_player_id, assist_player_name, sub_in_player_id, sub_in_player_name, detail`;
+
+function rowToEvent(e: any): MatchEvent {
+  return {
+    id: e.id,
+    minute: e.minute,
+    type: e.type,
+    departmentId: e.department_id,
+    playerId: e.player_id ?? undefined,
+    playerName: e.player_name,
+    assistPlayerId: e.assist_player_id ?? undefined,
+    assistPlayerName: e.assist_player_name ?? undefined,
+    subInPlayerId: e.sub_in_player_id ?? undefined,
+    subInPlayerName: e.sub_in_player_name ?? undefined,
+    detail: e.detail ?? undefined,
+  };
+}
+
 export async function getMatches(): Promise<Match[]> {
   freshRead();
-  const { rows: matchRows } = await sql`SELECT * FROM matches ORDER BY id`;
-  const { rows: eventRows } = await sql`SELECT id, match_id, minute, type, department_id, player_name, detail FROM match_events ORDER BY minute`;
+  const { rows: matchRows } = await sql`SELECT * FROM matches ORDER BY kickoff_at NULLS LAST, id`;
+  const { rows: eventRows } = await sql.query(
+    `SELECT match_id, ${EVENT_COLUMNS} FROM match_events ORDER BY minute`
+  );
 
   return matchRows.map((row: any) => {
     const events: MatchEvent[] = eventRows
       .filter((e: any) => e.match_id === row.id)
-      .map((e: any) => ({
-        id: e.id,
-        minute: e.minute,
-        type: e.type,
-        departmentId: e.department_id,
-        playerName: e.player_name,
-        detail: e.detail ?? undefined,
-      }));
+      .map(rowToEvent);
     return { ...rowToMatchBase(row), events };
   });
 }
@@ -156,16 +214,11 @@ export async function getMatch(id: string): Promise<Match | null> {
   freshRead();
   const { rows } = await sql`SELECT * FROM matches WHERE id = ${id}`;
   if (rows.length === 0) return null;
-  const { rows: eventRows } = await sql`SELECT id, minute, type, department_id, player_name, detail FROM match_events WHERE match_id = ${id} ORDER BY minute`;
-  const events: MatchEvent[] = eventRows.map((e: any) => ({
-    id: e.id,
-    minute: e.minute,
-    type: e.type,
-    departmentId: e.department_id,
-    playerName: e.player_name,
-    detail: e.detail ?? undefined,
-  }));
-  return { ...rowToMatchBase(rows[0]), events };
+  const { rows: eventRows } = await sql.query(
+    `SELECT ${EVENT_COLUMNS} FROM match_events WHERE match_id = $1 ORDER BY minute`,
+    [id]
+  );
+  return { ...rowToMatchBase(rows[0]), events: eventRows.map(rowToEvent) };
 }
 
 export async function upsertMatch(m: Match) {
@@ -174,38 +227,54 @@ export async function upsertMatch(m: Match) {
   await sql.query(
     `
     INSERT INTO matches (
-      id, status, minute, kickoff, round, "group", venue,
+      id, status, minute, kickoff, kickoff_at, round, "group", venue,
       home_department_id, away_department_id, home_score, away_score,
       home_formation, away_formation, home_starting_xi, away_starting_xi,
+      home_bench, away_bench,
       home_captain_id, away_captain_id, home_stats, away_stats
     ) VALUES (
-      $1, $2, $3, $4, $5, $6, $7,
-      $8, $9, $10, $11,
-      $12, $13,
-      $14, $15,
-      $16, $17,
-      $18, $19
+      $1, $2, $3, $4, $5, $6, $7, $8,
+      $9, $10, $11, $12,
+      $13, $14,
+      $15, $16,
+      $17, $18,
+      $19, $20,
+      $21, $22
     )
     ON CONFLICT (id) DO UPDATE SET
       status = EXCLUDED.status, minute = EXCLUDED.minute, kickoff = EXCLUDED.kickoff,
+      kickoff_at = EXCLUDED.kickoff_at,
       round = EXCLUDED.round, "group" = EXCLUDED."group", venue = EXCLUDED.venue,
       home_department_id = EXCLUDED.home_department_id, away_department_id = EXCLUDED.away_department_id,
       home_score = EXCLUDED.home_score, away_score = EXCLUDED.away_score,
       home_formation = EXCLUDED.home_formation, away_formation = EXCLUDED.away_formation,
       home_starting_xi = EXCLUDED.home_starting_xi, away_starting_xi = EXCLUDED.away_starting_xi,
+      home_bench = EXCLUDED.home_bench, away_bench = EXCLUDED.away_bench,
       home_captain_id = EXCLUDED.home_captain_id, away_captain_id = EXCLUDED.away_captain_id,
       home_stats = EXCLUDED.home_stats, away_stats = EXCLUDED.away_stats
   `,
     [
-      m.id, m.status, m.minute ?? null, m.kickoff, m.round, m.group, m.venue,
+      m.id, m.status, m.minute ?? null, m.kickoff, m.kickoffAt ?? null, m.round, m.group, m.venue,
       m.home.departmentId, m.away.departmentId, m.home.score, m.away.score,
       m.home.formation ?? null, m.away.formation ?? null,
       m.home.startingXI ?? null, m.away.startingXI ?? null,
+      m.home.bench ?? null, m.away.bench ?? null,
       m.home.captainId ?? null, m.away.captainId ?? null,
       m.home.stats ? JSON.stringify(m.home.stats) : null,
       m.away.stats ? JSON.stringify(m.away.stats) : null,
     ]
   );
+}
+
+/**
+ * Name the substitutes for one side.
+ *
+ * Its own statement rather than part of upsertMatch: naming a bench during a
+ * live match must not be able to touch the scoreline or the clock.
+ */
+export async function setMatchBench(matchId: string, side: "home" | "away", playerIds: string[]) {
+  const column = side === "home" ? "home_bench" : "away_bench";
+  await sql.query(`UPDATE matches SET ${column} = $1 WHERE id = $2`, [playerIds, matchId]);
 }
 
 // Wipe a match back to a clean slate: no score, no clock, no events.
@@ -229,7 +298,29 @@ export async function resetMatch(id: string) {
         first_half_started_at = NULL,
         second_half_started_at = NULL,
         first_half_added_minutes = 0,
-        second_half_added_minutes = 0
+        second_half_added_minutes = 0,
+        home_stats = NULL,
+        away_stats = NULL
+    WHERE id = ${id}
+  `;
+}
+
+// Team stats for a match — possession, shots and so on.
+//
+// These columns have always been read by the public stats tab but never
+// written: the matches route builds each side from departmentId and score
+// only, so anything sent for `stats` was silently dropped. This is the write
+// path. Kept separate from upsertMatch so recording a stat mid-match cannot
+// touch the scoreline, the clock or the lineups.
+export async function setMatchStats(
+  id: string,
+  home: TeamMatchStats | null,
+  away: TeamMatchStats | null
+) {
+  await sql`
+    UPDATE matches
+    SET home_stats = ${home ? JSON.stringify(home) : null}::jsonb,
+        away_stats = ${away ? JSON.stringify(away) : null}::jsonb
     WHERE id = ${id}
   `;
 }
@@ -242,24 +333,129 @@ export async function deleteMatch(id: string) {
   await sql`DELETE FROM matches WHERE id = ${id}`;
 }
 
-// The Top Scorers / Cards tables read the counters on the players row, so an
-// event recorded in admin has to move them or those tabs never change.
+// The leaderboards read counters on the players row, so an event has to move
+// them. Events now carry player_id, so this targets the exact squad member
+// rather than matching on a typed name — which credited nobody on a typo,
+// double-counted two players sharing a name, and orphaned a player's history
+// the moment they were renamed.
 const STAT_COLUMN: Partial<Record<MatchEvent["type"], string>> = {
   GOAL: "goals",
   YELLOW: "yellow_cards",
   RED: "red_cards",
 };
 
-async function adjustPlayerStat(e: MatchEvent, delta: 1 | -1) {
-  const column = STAT_COLUMN[e.type];
-  if (!column) return; // SUB has no counter
-
-  // `column` is only ever one of the three literals above, never user input.
+async function bump(column: string, playerId: string, delta: 1 | -1) {
+  // `column` is only ever one of the literals above, never user input.
   await sql.query(
-    `UPDATE players SET ${column} = GREATEST(${column} + $1, 0)
-     WHERE department_id = $2 AND LOWER(name) = LOWER($3)`,
-    [delta, e.departmentId, e.playerName]
+    `UPDATE players SET ${column} = GREATEST(${column} + $1, 0) WHERE id = $2`,
+    [delta, playerId]
   );
+}
+
+async function adjustPlayerStats(e: MatchEvent, delta: 1 | -1) {
+  const column = STAT_COLUMN[e.type];
+
+  if (column) {
+    if (e.playerId) {
+      await bump(column, e.playerId, delta);
+    } else if (e.playerName) {
+      // Legacy rows recorded before events carried an id.
+      await sql.query(
+        `UPDATE players SET ${column} = GREATEST(${column} + $1, 0)
+         WHERE department_id = $2 AND LOWER(name) = LOWER($3)`,
+        [delta, e.departmentId, e.playerName]
+      );
+    }
+  }
+
+  // An assist is part of the goal, not a separate event, so it is credited
+  // here. Nothing wrote players.assists before this, which is why the public
+  // Top Assists tab could never show anything.
+  if (e.type === "GOAL" && e.assistPlayerId) {
+    await bump("assists", e.assistPlayerId, delta);
+  }
+}
+
+// An event says something about the team as well as the player, and until now
+// nothing acted on that: a goal was logged and the scoreboard stayed 0-0, a
+// booking was logged and the foul count stayed put, so the admin had to
+// remember to type both. These are the consequences a single event has for the
+// team's side of the match.
+//
+// A goal is, by definition, a shot and a shot on target — counting it as
+// neither leaves "shots on target" lower than the number of goals scored.
+const TEAM_STAT_DELTAS: Partial<Record<MatchEvent["type"], Partial<TeamMatchStats>>> = {
+  GOAL: { shots: 1, shotsOnTarget: 1 },
+  YELLOW: { fouls: 1 },
+  RED: { fouls: 1 },
+};
+
+const DEFAULT_TEAM_STATS: TeamMatchStats = {
+  possession: 50,
+  shots: 0,
+  shotsOnTarget: 0,
+  corners: 0,
+  fouls: 0,
+};
+
+/**
+ * Move the scoreline and the team stat counters for one event.
+ *
+ * Applied with delta 1 when an event is recorded and -1 when it is removed, so
+ * deleting a mistake undoes everything it caused. The admin can still type over
+ * any of these afterwards — this only supplies the obvious consequence, it does
+ * not own the numbers.
+ */
+async function applyTeamEffects(matchId: string, e: MatchEvent, delta: 1 | -1) {
+  const statDelta = TEAM_STAT_DELTAS[e.type];
+  const scoreDelta = e.type === "GOAL" ? delta : 0;
+  if (!statDelta && scoreDelta === 0) return;
+
+  const { rows } = await sql`
+    SELECT home_department_id, away_department_id, home_stats, away_stats
+    FROM matches WHERE id = ${matchId}
+  `;
+  const row = rows[0];
+  if (!row) return;
+
+  // An event filed against a team not in this match would otherwise silently
+  // adjust the home side.
+  const side =
+    row.home_department_id === e.departmentId
+      ? "home"
+      : row.away_department_id === e.departmentId
+      ? "away"
+      : null;
+  if (!side) return;
+
+  if (scoreDelta !== 0) {
+    const column = side === "home" ? "home_score" : "away_score";
+    await sql.query(
+      `UPDATE matches SET ${column} = GREATEST(${column} + $1, 0) WHERE id = $2`,
+      [scoreDelta, matchId]
+    );
+  }
+
+  if (statDelta) {
+    const stored = (side === "home" ? row.home_stats : row.away_stats) as TeamMatchStats | null;
+    // Nothing recorded yet and an event being removed: there is no count to
+    // roll back, and inventing a zeroed block would make the public Stats tab
+    // appear because of a deletion.
+    if (!stored && delta === -1) return;
+
+    const base = stored ?? DEFAULT_TEAM_STATS;
+    const next: TeamMatchStats = { ...base };
+    for (const [key, amount] of Object.entries(statDelta)) {
+      const field = key as keyof TeamMatchStats;
+      next[field] = Math.max(0, base[field] + amount * delta);
+    }
+
+    const column = side === "home" ? "home_stats" : "away_stats";
+    await sql.query(`UPDATE matches SET ${column} = $1::jsonb WHERE id = $2`, [
+      JSON.stringify(next),
+      matchId,
+    ]);
+  }
 }
 
 export async function addMatchEvent(
@@ -268,20 +464,40 @@ export async function addMatchEvent(
   { syncPlayerStats = true }: { syncPlayerStats?: boolean } = {}
 ) {
   await sql`
-    INSERT INTO match_events (match_id, minute, type, department_id, player_name, detail)
-    VALUES (${matchId}, ${e.minute}, ${e.type}, ${e.departmentId}, ${e.playerName}, ${e.detail ?? null})
+    INSERT INTO match_events (
+      match_id, minute, type, department_id,
+      player_id, player_name, assist_player_id, assist_player_name,
+      sub_in_player_id, sub_in_player_name, detail
+    )
+    VALUES (
+      ${matchId}, ${e.minute}, ${e.type}, ${e.departmentId},
+      ${e.playerId ?? null}, ${e.playerName},
+      ${e.assistPlayerId ?? null}, ${e.assistPlayerName ?? null},
+      ${e.subInPlayerId ?? null}, ${e.subInPlayerName ?? null},
+      ${e.detail ?? null}
+    )
   `;
-  if (syncPlayerStats) await adjustPlayerStat(e, 1);
+  if (syncPlayerStats) {
+    await adjustPlayerStats(e, 1);
+    await applyTeamEffects(matchId, e, 1);
+  }
 }
 
 export async function deleteMatchEvent(eventId: number) {
-  // Read it back first so removing a mistake also rolls the counter back.
+  // Read it back first so removing a mistake also rolls back the counters, the
+  // assist, the scoreline and the team stats it moved.
   const { rows } = await sql`
-    SELECT type, department_id AS "departmentId", player_name AS "playerName", minute
+    SELECT match_id AS "matchId", type, department_id AS "departmentId",
+           player_id AS "playerId", player_name AS "playerName",
+           assist_player_id AS "assistPlayerId", minute
     FROM match_events WHERE id = ${eventId}
   `;
   await sql`DELETE FROM match_events WHERE id = ${eventId}`;
-  if (rows.length > 0) await adjustPlayerStat(rows[0] as MatchEvent, -1);
+  if (rows.length === 0) return;
+
+  const event = rows[0] as MatchEvent & { matchId: string };
+  await adjustPlayerStats(event, -1);
+  await applyTeamEffects(event.matchId, event, -1);
 }
 
 // ---------- Standings (computed from finished + live matches) ----------

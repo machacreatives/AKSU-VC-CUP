@@ -5,6 +5,7 @@ import { MIN_PASSWORD_LENGTH } from "@/lib/password-policy";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { api, queryKeys } from "@/lib/api";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNotice } from "./ui";
 
 type AdminUser = {
   id: string;
@@ -31,7 +32,7 @@ export default function AccountSection() {
   });
   const users: AdminUser[] = usersQuery.data ?? [];
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useNotice();
 
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
