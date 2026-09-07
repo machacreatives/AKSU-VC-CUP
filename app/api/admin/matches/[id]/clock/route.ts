@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "@vercel/postgres";
 import { denyUnlessOwnTeam, requireAdmin } from "@/lib/require-admin";
-import { getMatch, lineupsReady } from "@/lib/db/queries";
+import { getMatch } from "@/lib/db/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -45,23 +45,11 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
     switch (action) {
       case "start-first-half": {
-        // No kickoff without a teamsheet. Enforced here and not only in the
-        // dashboard, so a stale page cannot start a match that has no lineup —
-        // and once it is running the public Lineups tab has something to show.
-        const match = owned;
-        if (!lineupsReady(match)) {
-          const missing = [
-            (match.home.startingXI?.length ?? 0) !== 11 ? "the home side" : "",
-            (match.away.startingXI?.length ?? 0) !== 11 ? "the away side" : "",
-          ].filter(Boolean);
-          return NextResponse.json(
-            {
-              error: `Name the starting eleven for ${missing.join(" and ")} before kick-off. Set it under Teamsheets on the match page.`,
-            },
-            { status: 409 }
-          );
-        }
-
+        // Deliberately ungated. This used to refuse kickoff until both sides
+        // had a full eleven named, which assumed every squad was entered before
+        // the tournament started. On the day that is not true — a match has to
+        // be able to run with the scoreboard alone while the teamsheets catch
+        // up, so the lineup is now optional and can be added while it plays.
         await sql`
           UPDATE matches
           SET status = 'LIVE', first_half_started_at = now(),

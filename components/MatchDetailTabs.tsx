@@ -11,7 +11,11 @@ import MatchStatsCard from "./MatchStatsCard";
 type TabId = "lineups" | "stats" | "events";
 
 export default function MatchDetailTabs({ match }: { match: Match }) {
-  const hasLineups = !!(match.home.startingXI && match.away.startingXI);
+  // Length, not truthiness: an empty array is truthy, and now that a match can
+  // kick off without a teamsheet, one saved as [] would put an empty pitch and
+  // two blank team lists behind a "Lineups" tab.
+  const hasLineups =
+    (match.home.startingXI?.length ?? 0) > 0 && (match.away.startingXI?.length ?? 0) > 0;
   const hasStats = !!(match.home.stats && match.away.stats);
   const [tab, setTab] = useState<TabId>(hasLineups ? "lineups" : hasStats ? "stats" : "events");
   const home = useDepartment(match.home.departmentId);

@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og";
-import { getDepartments, getMatch } from "@/lib/db/queries";
-import { STAGE_LABELS } from "@/lib/types";
+import { getDepartments, getGroups, getMatch } from "@/lib/db/queries";
+import { findGroup, groupLabel, STAGE_LABELS } from "@/lib/types";
 
 // The picture that appears when a match link is shared.
 //
@@ -33,7 +33,11 @@ export default async function Image({ params }: { params: { id: string } }) {
   let where = "";
 
   try {
-    const [match, departments] = await Promise.all([getMatch(params.id), getDepartments()]);
+    const [match, departments, groups] = await Promise.all([
+      getMatch(params.id),
+      getDepartments(),
+      getGroups(),
+    ]);
     if (match) {
       const team = (id: string) => departments.find((d) => d.id === id);
       const h = team(match.home.departmentId);
@@ -59,7 +63,7 @@ export default async function Image({ params }: { params: { id: string } }) {
         match.stage && match.stage !== "GROUP"
           ? STAGE_LABELS[match.stage]
           : match.group
-          ? `Group ${match.group}`
+          ? groupLabel(findGroup(groups, match.group), match.group ?? undefined)
           : null,
         match.venue,
       ]

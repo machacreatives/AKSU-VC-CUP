@@ -222,7 +222,7 @@ export default function AdminMatchPage() {
         match={match}
         home={homeTeam}
         away={awayTeam}
-        locked={Boolean(match.firstHalfStartedAt) || match.status !== "UPCOMING"}
+        kickedOff={Boolean(match.firstHalfStartedAt) || match.status !== "UPCOMING"}
         ownDepartmentId={ownDepartmentId}
         onSaved={setNotice}
       />

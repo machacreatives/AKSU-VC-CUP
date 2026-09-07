@@ -508,6 +508,21 @@ export function lineupsLocked(match: Match): boolean {
   return Boolean(match.firstHalfStartedAt) || match.status !== "UPCOMING";
 }
 
+/**
+ * Whether one side's teamsheet is still editable.
+ *
+ * Kickoff no longer requires a lineup, so a match can be running with no
+ * teamsheet at all — and locking on the whistle alone would mean that side
+ * could never have one. The rule that matters is narrower than "has it kicked
+ * off": a sheet that was already named is a record of who started and stays
+ * frozen, but a side that never named one can still be filled in while the
+ * match plays.
+ */
+export function sideLineupLocked(match: Match, side: "home" | "away"): boolean {
+  if (!lineupsLocked(match)) return false;
+  return (match[side].startingXI?.length ?? 0) > 0;
+}
+
 export async function setManOfTheMatch(matchId: string, playerId: string | null) {
   await sql`UPDATE matches SET man_of_the_match_id = ${playerId} WHERE id = ${matchId}`;
 }

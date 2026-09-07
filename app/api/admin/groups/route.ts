@@ -71,7 +71,11 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
-    const idClash = !current && existing.find((g) => g.id === id);
+    // Compared case-insensitively: an exact match let a group named "C" take
+    // the id "c" while an older group already held "C", which is how this
+    // database ended up with two groups whose ids differ only by case.
+    const idClash =
+      !current && existing.find((g) => g.id.toLowerCase() === id.toLowerCase());
     if (idClash) {
       return NextResponse.json({ error: `Group ${idClash.name} already exists.` }, { status: 409 });
     }

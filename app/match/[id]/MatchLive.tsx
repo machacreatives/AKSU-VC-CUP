@@ -7,6 +7,7 @@ import MatchDetailTabs from "@/components/MatchDetailTabs";
 import MatchGone from "@/components/MatchGone";
 import ScorersLine from "@/components/ScorersLine";
 import { isNotFound, useMatch } from "@/lib/api";
+import { useGroupName } from "@/lib/data-context";
 import { Department, Match, STAGE_LABELS } from "@/lib/types";
 
 const unknownDepartment = (id: string): Department => ({
@@ -46,6 +47,7 @@ export default function MatchLive({
   if (isNotFound(error)) return <MatchGone reason="removed" />;
 
   const byId = new Map(departments.map((d) => [d.id, d]));
+  const groupName = useGroupName();
   const home = byId.get(match.home.departmentId) ?? unknownDepartment(match.home.departmentId);
   const away = byId.get(match.away.departmentId) ?? unknownDepartment(match.away.departmentId);
 
@@ -64,7 +66,7 @@ export default function MatchLive({
           <span className="rounded-full bg-surface2 px-2 py-0.5 text-white">
             {match.stage && match.stage !== "GROUP"
               ? STAGE_LABELS[match.stage].toUpperCase()
-              : `GROUP ${match.group ?? "—"}`}
+              : `GROUP ${groupName(match.group)}`}
           </span>
           <span>{match.round}</span>
           <span>&middot;</span>

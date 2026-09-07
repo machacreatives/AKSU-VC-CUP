@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Match, MatchStage } from "@/lib/types";
-import { useDepartment } from "@/lib/data-context";
+import { useDepartment, useGroupName } from "@/lib/data-context";
 import DeptBadge from "./DeptBadge";
 import MatchClock from "./MatchClock";
 
@@ -16,7 +16,36 @@ const SHORT_STAGE: Record<MatchStage, string> = {
   FINAL: "FINAL",
 };
 
+/**
+ * The day above the time, e.g. "Sat 16 Aug" over "3:00 PM".
+ *
+ * The card used to render `kickoff.split(",")[1]`, which threw the date away
+ * and left a column of bare clock times — unreadable across a tournament that
+ * runs for a fortnight. The stored string already carries both halves, so this
+ * is only a matter of showing them.
+ *
+ * A legacy fixture typed in before the date picker has no comma to split on;
+ * that prints whole, on one line.
+ */
+function KickoffStamp({ kickoff }: { kickoff: string }) {
+  const comma = kickoff.indexOf(",");
+  if (comma === -1) {
+    return <span className="text-center text-[12.5px] font-medium text-white">{kickoff}</span>;
+  }
+  return (
+    <>
+      <span className="text-center text-[10.5px] font-semibold uppercase leading-tight text-white/60">
+        {kickoff.slice(0, comma)}
+      </span>
+      <span className="text-center text-[13.5px] font-bold leading-tight text-white">
+        {kickoff.slice(comma + 1).trim()}
+      </span>
+    </>
+  );
+}
+
 export default function MatchCard({ match }: { match: Match }) {
+  const groupName = useGroupName();
   const home = useDepartment(match.home.departmentId);
   const away = useDepartment(match.away.departmentId);
   const isLive = match.status === "LIVE" || match.status === "HT";
@@ -38,13 +67,11 @@ export default function MatchCard({ match }: { match: Match }) {
         style={{ background: `linear-gradient(180deg, ${home.color}, ${away.color})` }}
       />
       {/* status column */}
-      <div className="flex w-14 shrink-0 flex-col items-center justify-center gap-0.5">
+      <div className="flex w-[4.5rem] shrink-0 flex-col items-center justify-center gap-0.5">
         {isLive ? (
           <MatchClock match={match} className="text-[13px] font-bold text-win" />
         ) : match.status === "UPCOMING" ? (
-          <span className="text-[14.5px] font-medium text-white">
-            {match.kickoff.split(",")[1] ?? match.kickoff}
-          </span>
+          <KickoffStamp kickoff={match.kickoff} />
         ) : (
           <span className="text-[13px] font-bold text-white">FT</span>
         )}
@@ -52,7 +79,7 @@ export default function MatchCard({ match }: { match: Match }) {
         <span className="rounded-[4px] bg-surface3 px-1.5 py-0.5 text-[10px] font-bold text-white">
           {match.stage && match.stage !== "GROUP"
             ? SHORT_STAGE[match.stage]
-            : `GRP ${match.group ?? "—"}`}
+            : `GRP ${groupName(match.group)}`}
         </span>
       </div>
 

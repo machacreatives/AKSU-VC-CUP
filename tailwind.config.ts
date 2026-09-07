@@ -20,9 +20,10 @@ const config: Config = {
         pitchLine: "#22402E",   // pitch markings
       },
       fontFamily: {
-        // Closest free stand-in for D-DIN — condensed, geometric, technical.
-        sans: ["var(--font-din)", "system-ui", "sans-serif"],
-        score: ["var(--font-din)", "system-ui", "sans-serif"],
+        sans: ["var(--font-lato)", "system-ui", "sans-serif"],
+        // Same face today. Kept as its own key so a distinct scoreboard font
+        // can be swapped in here without touching the four call sites.
+        score: ["var(--font-lato)", "system-ui", "sans-serif"],
       },
       borderRadius: {
         card: "12px",

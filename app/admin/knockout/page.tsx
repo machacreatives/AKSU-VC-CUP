@@ -4,11 +4,12 @@ import { useState } from "react";
 import Link from "next/link";
 import DeptBadge from "@/components/DeptBadge";
 import { Skeleton, SkeletonPageHeader, SkeletonScreen } from "@/components/Skeleton";
-import { useDepartments, useMatches } from "@/lib/api";
+import { useDepartments, useGroups, useMatches } from "@/lib/api";
 import { computeStandings, sortStandings } from "@/lib/standings";
 import {
   CAMPUSES,
   Department,
+  findGroup,
   KNOCKOUT_STAGES,
   Match,
   MatchStage,
@@ -37,6 +38,7 @@ const STATUS_STYLES: Record<string, string> = {
 function AdminKnockoutPage() {
   const matchesQuery = useMatches();
   const teamsQuery = useDepartments();
+  const { data: groups = [] } = useGroups();
 
   const matches: Match[] = matchesQuery.data ?? [];
   const departments: Department[] = teamsQuery.data ?? [];
@@ -136,7 +138,7 @@ function AdminKnockoutPage() {
               const t = team(top!.departmentId);
               return (
                 <span key={groupId} className="flex items-center gap-1.5 text-[13px] text-white">
-                  <span className="font-bold text-accent">{groupId}</span>
+                  <span className="font-bold text-accent">{findGroup(groups, groupId)?.name ?? groupId}</span>
                   <DeptBadge department={t} size={18} />
                   {t.shortName}
                   <span className="text-white/60">{top!.points} pts</span>

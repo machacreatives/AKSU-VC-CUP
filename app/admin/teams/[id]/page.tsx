@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import DeptBadge from "@/components/DeptBadge";
 import { useConfirm } from "@/components/ConfirmDialog";
-import { queryKeys, useDepartments, useMe, usePlayers } from "@/lib/api";
+import { queryKeys, useDepartments, useGroups, useMe, usePlayers } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   PLAYER_STATUSES,
@@ -18,6 +18,8 @@ import {
   SQUAD_ROLE_LABELS,
   SquadRole,
   Department,
+  findGroup,
+  groupLabel,
 } from "@/lib/types";
 import { Skeleton, SkeletonPageHeader, SkeletonRows, SkeletonScreen } from "@/components/Skeleton";
 import {
@@ -50,6 +52,7 @@ export default function TeamSquadPage() {
 
   const queryClient = useQueryClient();
   const teamsQuery = useDepartments();
+  const { data: groups = [] } = useGroups();
   const playersQuery = usePlayers();
 
   // Coming from the teams list, both of these are already cached — the squad
@@ -211,7 +214,7 @@ export default function TeamSquadPage() {
 
       <PageHeader
         title={team.name}
-        subtitle={`${team.shortName} · ${team.faculty} · Group ${team.group}`}
+        subtitle={`${team.shortName} · ${team.faculty} · ${groupLabel(findGroup(groups, team.group), team.group)}`}
         action={
           // The team record itself — name, campus, group, colour — decides which
           // table the team appears in, so it belongs with the tournament settings.
