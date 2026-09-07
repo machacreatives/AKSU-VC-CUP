@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo } from "react";
 import { useDepartments, useMatches, usePlayers } from "@/lib/api";
 import { buildTeamProfile, sidesOf, TeamProfile } from "@/lib/team-profile";
-import { useDepartmentLookup } from "@/lib/data-context";
+import { useDepartmentLookup, useGroupName } from "@/lib/data-context";
 import { Department, Match, Player, PLAYER_STATUS_LABELS } from "@/lib/types";
 import DeptBadge from "@/components/DeptBadge";
 import FormGuide from "@/components/FormGuide";
@@ -57,13 +57,14 @@ function SectionHeading({ children, note }: { children: React.ReactNode; note?: 
 
 /** Where the team stands, in words. */
 function PositionBadge({ profile }: { profile: TeamProfile }) {
+  const groupName = useGroupName();
   const p = profile.position;
 
   if (p.kind === "group") {
     const ordinal = ["", "1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th"][p.position] ?? `${p.position}th`;
     return (
       <span className="rounded-full border border-accent/40 bg-accent/15 px-2.5 py-1 text-[12px] font-bold text-white">
-        {ordinal} in Group {p.group} · {p.points} pt{p.points === 1 ? "" : "s"}
+        {ordinal} in Group {groupName(p.group)} · {p.points} pt{p.points === 1 ? "" : "s"}
       </span>
     );
   }

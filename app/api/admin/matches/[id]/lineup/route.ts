@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "@vercel/postgres";
 import { denyUnlessOwnTeam, requireAdmin } from "@/lib/require-admin";
-import { getMatch, lineupsLocked, setMatchLineup } from "@/lib/db/queries";
+import { getMatch, setMatchLineup, sideLineupLocked } from "@/lib/db/queries";
 import { isValidFormation, rowsFromFormation } from "@/lib/formation";
 
 export const dynamic = "force-dynamic";
@@ -16,19 +16,6 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const match = await getMatch(params.id);
     if (!match) return NextResponse.json({ error: "Match not found." }, { status: 404 });
 
-    // A teamsheet describes who started. Once the whistle has gone that is a
-    // record, not a plan — editing it would rewrite who was on the pitch when
-    // a goal was already scored.
-    if (lineupsLocked(match)) {
-      return NextResponse.json(
-        {
-          error:
-            "This match has already kicked off, so the teamsheets are locked. Reset the clock first if it was started by mistake.",
-        },
-        { status: 409 }
-      );
-    }
-
     const body = await req.json();
     const side: "home" | "away" | null =
       body.side === "home" || body.side === "away" ? body.side : null;
@@ -38,6 +25,19 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     // from the match before it can be checked against who is asking.
     const denied = denyUnlessOwnTeam(auth.user, match[side].departmentId);
     if (denied) return denied;
+
+    // A teamsheet that was already named is a record of who started, so it
+    // freezes at kickoff. One that was never named can still be filled in while
+    // the match runs — matches no longer wait for a lineup to start.
+    if (sideLineupLocked(match, side)) {
+      return NextResponse.json(
+        {
+          error:
+            "This side's teamsheet was named before kick-off, so it is locked. Reset the clock first if it needs to change.",
+        },
+        { status: 409 }
+      );
+    }
 
     const formation = String(body.formation ?? "").trim();
     if (!isValidFormation(formation)) {

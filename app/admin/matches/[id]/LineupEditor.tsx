@@ -302,14 +302,15 @@ export default function LineupEditor({
   match,
   home,
   away,
-  locked,
+  kickedOff,
   ownDepartmentId = null,
   onSaved,
 }: {
   match: Match;
   home: Department;
   away: Department;
-  locked: boolean;
+  /** Whether the whistle has gone. Locking is decided per side from this. */
+  kickedOff: boolean;
   /** Null for a superadmin, who owns both. */
   ownDepartmentId?: string | null;
   onSaved: (message: string) => void;
@@ -323,8 +324,14 @@ export default function LineupEditor({
         (a, b) => POSITION_ORDER[a.position] - POSITION_ORDER[b.position] || a.number - b.number
       );
 
-  const ready =
-    (match.home.startingXI?.length ?? 0) === 11 && (match.away.startingXI?.length ?? 0) === 11;
+  const named = (side: "home" | "away") => (match[side].startingXI?.length ?? 0) === 11;
+  const ready = named("home") && named("away");
+
+  // A sheet named before kick-off is the record of who started and freezes.
+  // One that was never named can still be filled in while the match runs,
+  // because a match no longer waits for a lineup to start.
+  const sideLocked = (side: "home" | "away") => kickedOff && named(side);
+  const bothLocked = sideLocked("home") && sideLocked("away");
 
   return (
     <section id="teamsheets" className="scroll-mt-4 space-y-3">
@@ -332,29 +339,31 @@ export default function LineupEditor({
         <h2 className="text-[13px] font-bold uppercase tracking-wide text-white">Teamsheets</h2>
         <span
           className={`text-[12px] font-semibold ${
-            locked ? "text-white/60" : ready ? "text-win" : "text-gold"
+            bothLocked ? "text-white/60" : ready ? "text-win" : "text-white/70"
           }`}
         >
-          {locked
+          {bothLocked
             ? "Locked — the match has kicked off"
             : ready
-            ? "Both sides named — ready to kick off"
-            : "Needed before kick-off"}
+            ? "Both sides named"
+            : kickedOff
+            ? "Optional — can still be added while the match runs"
+            : "Optional — a match can start without one"}
         </span>
       </div>
 
-      {!locked && ownDepartmentId && (
+      {!bothLocked && ownDepartmentId && (
         <Banner tone="info">
-          You name your own eleven. The opposition&apos;s teamsheet is theirs to set, and the match
-          cannot kick off until both are in.
+          You name your own eleven. The opposition&apos;s teamsheet is theirs to set. Neither is
+          required to kick off — a match can run on the scoreboard alone.
         </Banner>
       )}
 
-      {locked && (
+      {bothLocked && (
         <Banner tone="info">
-          Teamsheets are fixed once a match starts, so the record of who was on the pitch cannot
-          change under events already recorded. Use <strong>Reset clock</strong> on the dashboard if
-          the match was started by mistake.
+          Both teamsheets were named before kick-off, so they are fixed — the record of who was on
+          the pitch cannot change under events already recorded. Use <strong>Reset clock</strong> on
+          the dashboard if the match was started by mistake.
         </Banner>
       )}
 
@@ -364,7 +373,7 @@ export default function LineupEditor({
           side="home"
           team={home}
           squad={squadFor(match.home.departmentId)}
-          locked={locked || (ownDepartmentId !== null && ownDepartmentId !== match.home.departmentId)}
+          locked={sideLocked("home") || (ownDepartmentId !== null && ownDepartmentId !== match.home.departmentId)}
           onSaved={onSaved}
         />
         <SideEditor
@@ -372,7 +381,7 @@ export default function LineupEditor({
           side="away"
           team={away}
           squad={squadFor(match.away.departmentId)}
-          locked={locked || (ownDepartmentId !== null && ownDepartmentId !== match.away.departmentId)}
+          locked={sideLocked("away") || (ownDepartmentId !== null && ownDepartmentId !== match.away.departmentId)}
           onSaved={onSaved}
         />
       </div>

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getDepartments, getMatch, getPlayersWithRatings } from "@/lib/db/queries";
-import { STAGE_LABELS } from "@/lib/types";
+import { getDepartments, getGroups, getMatch, getPlayersWithRatings } from "@/lib/db/queries";
+import { findGroup, groupLabel, STAGE_LABELS } from "@/lib/types";
 import { DataProvider } from "@/lib/data-context";
 import DbErrorNotice from "@/components/DbErrorNotice";
 import MatchLive from "./MatchLive";
@@ -22,7 +22,11 @@ export async function generateMetadata({
   params: { id: string };
 }): Promise<Metadata> {
   try {
-    const [match, departments] = await Promise.all([getMatch(params.id), getDepartments()]);
+    const [match, departments, groups] = await Promise.all([
+      getMatch(params.id),
+      getDepartments(),
+      getGroups(),
+    ]);
     if (!match) return { title: "Match not found" };
 
     const name = (id: string) => departments.find((d) => d.id === id)?.shortName ?? "???";
@@ -47,7 +51,7 @@ export async function generateMetadata({
       match.stage && match.stage !== "GROUP"
         ? STAGE_LABELS[match.stage]
         : match.group
-        ? `Group ${match.group}`
+        ? groupLabel(findGroup(groups, match.group), match.group ?? undefined)
         : null,
       match.round,
       match.venue,
@@ -70,12 +74,13 @@ export async function generateMetadata({
 }
 
 export default async function MatchPage({ params }: { params: { id: string } }) {
-  let match, departments, players;
+  let match, departments, players, groups;
   try {
-    [match, departments, players] = await Promise.all([
+    [match, departments, players, groups] = await Promise.all([
       getMatch(params.id),
       getDepartments(),
       getPlayersWithRatings(),
+      getGroups(),
     ]);
   } catch (err) {
     // Logged here, never sent to the browser in production — the driver
@@ -91,7 +96,7 @@ export default async function MatchPage({ params }: { params: { id: string } }) 
   // keeps it current through React Query instead of re-running this whole
   // component on a timer.
   return (
-    <DataProvider departments={departments} players={players} serverNow={Date.now()}>
+    <DataProvider departments={departments} players={players} groups={groups} serverNow={Date.now()}>
       <MatchLive initialMatch={match} departments={departments} />
     </DataProvider>
   );

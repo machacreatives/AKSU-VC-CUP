@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { Department, Player } from "@/lib/types";
+import { Department, findGroup, Group, groupLabel, Player } from "@/lib/types";
 
 // Every card, table and pitch needs to turn a departmentId / playerId into a
 // full record. That used to be a module-level lookup into mock-data; now the
@@ -10,8 +10,10 @@ import { Department, Player } from "@/lib/types";
 type Data = {
   departments: Department[];
   players: Player[];
+  groups: Group[];
   departmentsById: Map<string, Department>;
   playersById: Map<string, Player>;
+  groupsById: Map<string, Group>;
   /** Server time when the page was rendered, in ms. Anchors the match clock. */
   serverNow: number;
 };
@@ -21,11 +23,14 @@ const DataContext = createContext<Data | null>(null);
 export function DataProvider({
   departments,
   players,
+  groups = [],
   serverNow,
   children,
 }: {
   departments: Department[];
   players: Player[];
+  /** Needed to turn a stored group id into the letter people recognise. */
+  groups?: Group[];
   serverNow: number;
   children: React.ReactNode;
 }) {
@@ -33,11 +38,13 @@ export function DataProvider({
     () => ({
       departments,
       players,
+      groups,
       serverNow,
       departmentsById: new Map(departments.map((d) => [d.id, d])),
       playersById: new Map(players.map((p) => [p.id, p])),
+      groupsById: new Map(groups.map((g) => [g.id, g])),
     }),
-    [departments, players, serverNow]
+    [departments, players, groups, serverNow]
   );
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
@@ -78,6 +85,28 @@ export function useDepartment(id: string): Department {
 export function useDepartmentLookup(): (id: string) => Department {
   const { departmentsById } = useData();
   return (id) => departmentsById.get(id) ?? unknownDepartment(id);
+}
+
+/**
+ * The letter a group is *called*, from the id a team or fixture stores.
+ *
+ * A group's id is frozen when it is created but its name can be edited, so the
+ * two drift — a group created as C and later renamed A still has the id "C".
+ * Printing the id showed "Group C" on the public site while the admin, which
+ * reads the name, said "Group A". Everything user-facing goes through here.
+ *
+ * Falls back to the raw id, which is right for a group deleted out from under
+ * a fixture: a stale letter beats "Group ?".
+ */
+export function useGroupLabel(): (id: string | null | undefined) => string {
+  const { groups } = useData();
+  return (id) => groupLabel(findGroup(groups, id), id ?? undefined);
+}
+
+/** Just the name, for places that supply their own wording. */
+export function useGroupName(): (id: string | null | undefined) => string {
+  const { groupsById } = useData();
+  return (id) => (id ? groupsById.get(id)?.name ?? id : "—");
 }
 
 const unknownPlayer = (id: string): Player => ({

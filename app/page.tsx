@@ -37,7 +37,12 @@ export default async function Home() {
   }
 
   return (
-    <DataProvider departments={data.departments} players={data.players} serverNow={Date.now()}>
+    <DataProvider
+      departments={data.departments}
+      players={data.players}
+      groups={data.groups}
+      serverNow={Date.now()}
+    >
       <HomeTabs
         matches={data.matches}
         standings={data.standings}

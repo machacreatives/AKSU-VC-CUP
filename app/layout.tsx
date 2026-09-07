@@ -1,18 +1,19 @@
 import type { Metadata } from "next";
-import { Barlow_Condensed } from "next/font/google";
+import { Lato } from "next/font/google";
 import "./globals.css";
 import Header from "@/components/Header";
 import Providers from "./providers";
 import { tournamentName } from "@/lib/config";
 import { siteUrl } from "@/lib/site-url";
 
-// D-DIN is a commercial font with no free/Google Fonts license, so it can't
-// be loaded here. Barlow Condensed is the closest free match — same
-// geometric, industrial, condensed-technical feel used across sports UIs.
-const barlow = Barlow_Condensed({
+// Lato is not a variable font, so the weights used have to be listed or the
+// browser synthesizes them. 900 is included because the UI leans on
+// font-extrabold (800), which Lato has no cut for — CSS matching picks the
+// next weight up, so those render as the real Black rather than a faux bold.
+const lato = Lato({
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
-  variable: "--font-din",
+  weight: ["300", "400", "700", "900"],
+  variable: "--font-lato",
 });
 
 const SITE_NAME = `AKSU Score — ${tournamentName}`;
@@ -50,7 +51,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={barlow.variable}>
+    <html lang="en" className={lato.variable}>
       <body className="min-h-screen bg-base font-sans antialiased">
         {/* Widens in steps rather than jumping straight from phone to desktop,
             so tablets don't sit inside a 512px column with empty space either
